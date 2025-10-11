@@ -3,14 +3,11 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Planificador de Ruta · RD — v1.1.2</title>
+<title>Planificador de Ruta · RD — v1.1.6</title>
 
-<!-- Leaflet & plugins -->
+<!-- Leaflet (sin clustering) -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
 <!-- XLSX & CSV -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -91,15 +88,15 @@ button{
 .btn-red{background:var(--danger); color:#fff}
 
 .map-wrap{
-  display:grid; grid-template-rows: 52px 1fr minmax(340px, 45vh); gap:12px; height:calc(100vh - 120px);
+  display:grid; grid-template-rows: 52px 1fr minmax(520px, 75vh); gap:12px; height:calc(100vh - 120px);
 }
 .toolbar{
   display:flex; gap:10px; align-items:center; padding:8px 10px;
 }
 .toolbar .spacer{flex:1}
-#map{width:100%; height:100%; border-radius:var(--radius); border:1px solid #e5e7eb}
+#map{width:100%; height:100%; min-height:320px; border-radius:var(--radius); border:1px solid #e5e7eb}
 .table{
-  height:100%; overflow:auto; border:1px solid #e5e7eb; border-radius:var(--radius);
+  height:58vh; max-height:70vh; overflow:auto; border:1px solid #e5e7eb; border-radius:var(--radius);
 }
 table{width:100%; border-collapse:separate; border-spacing:0}
 th,td{font-size:13px; padding:10px 8px; border-bottom:1px solid #eef2f7}
@@ -116,6 +113,11 @@ hr.sep{border:0;border-top:1px dashed #e5e7eb;margin:12px 0}
 footer{max-width:1400px;margin:16px auto 32px;padding:0 18px;color:#64748b;font-size:12px}
 kbd{background:#e2e8f0;border-radius:6px;padding:2px 6px}
 .badge-info{background:#ecfeff;color:#155e75;padding:3px 6px;border-radius:999px;font-size:11px;margin-left:6px}
+
+/* tamano de selects en tabla para ver valores claramente */
+#planTable select.edit-semana{ min-width:64px; width:64px; text-align:center; }
+#planTable select.edit-dia{ min-width:86px; width:86px; }
+
 </style>
 </head>
 <body>
@@ -129,7 +131,7 @@ kbd{background:#e2e8f0;border-radius:6px;padding:2px 6px}
     <div class="chips">
       <span class="chip">Semanas 1–4</span>
       <span class="chip">Lun–Vie, Sáb opcional</span>
-      <span class="version">v1.1.2</span>
+      <span class="version">v1.1.6</span>
     </div>
   </div>
 </header>
@@ -233,7 +235,7 @@ kbd{background:#e2e8f0;border-radius:6px;padding:2px 6px}
     <!-- Filtros (editables y combinables) -->
     <div class="section" style="padding:10px 12px; border:1px dashed #e5e7eb; margin:0 12px; border-radius:12px">
       <div class="row" style="grid-template-columns: repeat(5, 1fr); gap:10px">
-        <div><label>Vendedores<span class="badge-info" id="vendCount"></span></label><select id="fltVendedor"></select></div>
+        <div><label>Vendedores<span class="badge-info" id="vendCount"></span></label><select id="fltVendedor" multiple></select></div>
         <div><label>Empresas</label><select id="fltEmpresa"></select></div>
         <div><label>Provincias</label><select id="fltProvincia"></select></div>
         <div><label>Semanas</label><select id="fltSemana"></select></div>
@@ -269,8 +271,7 @@ kbd{background:#e2e8f0;border-radius:6px;padding:2px 6px}
 </main>
 
 <footer>
-  <div>Planificador de Ruta · RD — <b>v1.1.2</b>. Entrega con filtros, edición en tabla, Excel y diseño responsive para PC.</div>
-  <div class="small">Soporta Google Sheets (CSV público) y archivos Excel/CSV locales. El mapa usa <a href="https://leafletjs.com" target="_blank">Leaflet</a>.</div>
+  <div>Planificador de Ruta · RD — <b>v1.1.6</b>. Igual que tu versión estable, con pines <b>desagrupados</b>.</div>
 </footer>
 
 <script>
@@ -298,21 +299,21 @@ function fillSelect(sel, values, withAll=true, labelAll='(Todos)'){
 /* ---------- Estado ---------- */
 let rawRows = [];      // filas originales (objetos con columnas)
 let mappedRows = [];   // filas con nombres estandar
-let layerCluster;      // cluster de marcadores
+let markerLayer;       // CAPA DE MARCADORES (sin clúster)
 let plan = [];         // plan resultante (asignado)
 let filteredPlan = []; // vista filtrada
 let vendors = []; let empresas=[]; let provincias=[];
 
 /* ---------- Mapa ---------- */
 const map = L.map('map', { zoomControl: true });
-const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap',
   maxZoom: 19
 }).addTo(map);
 const rdBounds = L.latLngBounds([17.4,-72],[20.1,-68.1]);
 map.fitBounds(rdBounds);
-layerCluster = L.markerClusterGroup();
-map.addLayer(layerCluster);
+// SIN cluster: capa simple
+markerLayer = L.layerGroup().addTo(map);
 
 function fitRD(){
   const v = $('#mapCenter').value.trim();
@@ -506,7 +507,7 @@ $('#btnProcesar').addEventListener('click', () => {
 });
 $('#btnLimpiar').addEventListener('click', () => {
   plan = []; mappedRows = []; rawRows = []; filteredPlan=[];
-  layerCluster.clearLayers();
+  markerLayer.clearLayers();
   $('#planTable tbody').innerHTML = '';
   $('#tableInfo').textContent = '0 clientes en el plan.';
   alert('Se limpió la vista. Vuelve a cargar datos.');
@@ -546,7 +547,7 @@ function applyFiltersAndRender(){
 
 /* ---------- Render de mapa y tabla ---------- */
 function drawMarkers(rows){
-  layerCluster.clearLayers();
+  markerLayer.clearLayers();
   const markers = rows.map(r => {
     const mk = L.marker([r.lat, r.lon]);
     const html = `
@@ -558,7 +559,7 @@ function drawMarkers(rows){
     mk.bindPopup(html);
     return mk;
   });
-  markers.forEach(m => layerCluster.addLayer(m));
+  markers.forEach(m => markerLayer.addLayer(m));
   if(markers.length){
     const g = L.featureGroup(markers);
     map.fitBounds(g.getBounds().pad(0.2));
@@ -631,7 +632,7 @@ $('#btnExportCSV').addEventListener('click', () => {
   const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'plan_visitas_v1.1.2.csv';
+  a.href = url; a.download = 'plan_visitas_v1.1.6.csv';
   document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 200);
 });
@@ -654,7 +655,7 @@ $('#btnExportXLSX').addEventListener('click', () => {
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(data);
   XLSX.utils.book_append_sheet(wb, ws, 'Ruta');
-  XLSX.writeFile(wb, 'plan_visitas_v1.1.2.xlsx');
+  XLSX.writeFile(wb, 'plan_visitas_v1.1.6.xlsx');
 });
 
 /* ---------- Preferencias ---------- */
@@ -692,5 +693,305 @@ $('#btnCargarPrefs').addEventListener('click', () => {
   alert('Preferencias cargadas. Si ya tienes datos, revisa el mapeo y pulsa Aplicar.');
 });
 </script>
+
+<script>
+// === v1.1.8: mejoras sin romper nada ===
+(function(){
+  const $ = (q, root=document) => root.querySelector(q);
+  const $$ = (q, root=document) => Array.from(root.querySelectorAll(q));
+  const toRad = d => d*Math.PI/180;
+  const haversine = (a,b)=>{ const R=6371, dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon); const hh=Math.sin(dLat/2)**2+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLon/2)**2; return 2*R*Math.asin(Math.sqrt(hh)); };
+
+  // 1) Asegurar capas (no falla si ya existen)
+  try{
+    if (typeof L !== 'undefined' && typeof map !== 'undefined') {
+      if (typeof markerLayer === 'undefined') { window.markerLayer = L.layerGroup().addTo(map); }
+      if (typeof routeLayer  === 'undefined') { window.routeLayer  = L.layerGroup().addTo(map); }
+    }
+  }catch(e){ console.warn('init layers warn', e); }
+
+  // 2) Quality info en toolbar (si no existe)
+  try{
+    const tb = document.querySelector('.toolbar');
+    if (tb && !document.getElementById('qualityInfo')) {
+      const div = document.createElement('div');
+      div.id = 'qualityInfo';
+      div.className = 'small';
+      div.style.cssText = 'margin-left:10px;color:#0f172a;background:#f1f5f9;border-radius:8px;padding:6px 8px;display:none';
+      const spacer = tb.querySelector('.spacer');
+      tb.insertBefore(div, spacer || null);
+    }
+  }catch(e){ console.warn('quality insert warn', e); }
+
+  // 3) Algoritmo selector junto a Límite/día (no existe -> crear)
+  try{
+    const limit = document.getElementById('limitPerDay');
+    if (limit && !document.getElementById('algo')){
+      const col = document.createElement('div');
+      col.innerHTML = '<label>Algoritmo</label>\
+        <select id="algo">\
+          <option value="kmeans" selected>k-means por día (recomendado)</option>\
+          <option value="nn">Orden por cercanía (NN)</option>\
+          <option value="polar">Ángulo polar</option>\
+        </select>';
+      const row = limit.closest('.row') || limit.parentElement;
+      if (row) {
+        // Inserta antes del campo Límite/día
+        row.insertBefore(col, limit.parentElement || limit);
+      }
+    }
+  }catch(e){ console.warn('algo insert warn', e); }
+
+  // 4) Helpers de asignación (una sola vez)
+  function centroid(ps){ if(!ps.length) return {lat:0,lon:0}; let sl=0,so=0; ps.forEach(p=>{sl+=p.lat; so+=p.lon}); return {lat:sl/ps.length, lon:so/ps.length}; }
+  function kmeansGroups(ps,k,iters=6){
+    if(ps.length<=k) return ps.map(p=>[p]);
+    const c0=centroid(ps);
+    const angs=ps.map(p=>({p,a:Math.atan2(p.lat-c0.lat,p.lon-c0.lon)})).sort((a,b)=>a.a-b.a);
+    const step=Math.max(1,Math.floor(angs.length/k));
+    let cents=Array.from({length:k},(_,i)=>({lat:angs[Math.min(i*step,angs.length-1)].p.lat,lon:angs[Math.min(i*step,angs.length-1)].p.lon}));
+    let groups=Array.from({length:k},()=>[]);
+    for(let it=0; it<iters; it++){
+      groups=Array.from({length:k},()=>[]);
+      ps.forEach(p=>{
+        let best=0,bestD=Infinity;
+        for(let i=0;i<cents.length;i++){ const d=haversine(p,cents[i]); if(d<bestD){bestD=d;best=i;} }
+        groups[best].push(p);
+      });
+      cents=groups.map(g=>g.length?centroid(g):cents[Math.floor(Math.random()*cents.length)]);
+    }
+    return groups;
+  }
+  function nearestPath(list){
+    if(list.length<=1) return list.slice();
+    const left=list.slice(); const ordered=[ left.shift() ];
+    while(left.length){
+      let best=0,bestD=Infinity;
+      for(let i=0;i<left.length;i++){ const d=haversine(ordered[ordered.length-1], left[i]); if(d<bestD){bestD=d;best=i;} }
+      ordered.push(left.splice(best,1)[0]);
+    }
+    return ordered;
+  }
+  function polarOrder(list){
+    if(list.length<=1) return list.slice();
+    const c=centroid(list); return list.slice().sort((a,b)=>Math.atan2(a.lat-c.lat,a.lon-c.lon)-Math.atan2(b.lat-c.lat,b.lon-c.lon));
+  }
+
+  // 5) Funciones de rutas y calidad (guardadas)
+  function colorByVendor(name){
+    const colors=['#2563eb','#16a34a','#dc2626','#f59e0b','#7c3aed','#0891b2','#be185d','#10b981','#0ea5e9','#334155','#ef4444','#22c55e'];
+    const idx=Math.abs((name||'').split('').reduce((a,c)=>a+c.charCodeAt(0),0))%colors.length; return colors[idx];
+  }
+  function drawRoutes(rows){
+    if (!window.routeLayer || !Array.isArray(rows)) return;
+    routeLayer.clearLayers();
+    if(!rows.length || typeof L==='undefined') return;
+    const groups={};
+    rows.forEach(r=>{ const k=(r.vendedor||'Sin vendedor')+'|'+(r.semana||'')+'|'+(r.dia||''); (groups[k]??=[]).push(r); });
+    Object.values(groups).forEach(list=>{
+      const ord=list.slice().sort((a,b)=>a.__id-b.__id);
+      const latlngs=ord.map(r=>[r.lat,r.lon]);
+      const vend=list[0].vendedor||'Sin vendedor';
+      L.polyline(latlngs,{color:colorByVendor(vend),weight:4,opacity:0.9}).addTo(routeLayer);
+    });
+  }
+  function totalDistanceKm(rows){
+    if(!Array.isArray(rows)) return 0;
+    const groups={}; rows.forEach(r=>{ const k=(r.vendedor||'Sin vendedor')+'|'+(r.semana||'')+'|'+(r.dia||''); (groups[k]??=[]).push(r); });
+    let sum=0; Object.values(groups).forEach(list=>{ const ord=list.slice().sort((a,b)=>a.__id-b.__id); for(let i=1;i<ord.length;i++){ sum+=haversine({lat:ord[i-1].lat,lon:ord[i-1].lon},{lat:ord[i].lat,lon:ord[i].lon}); } });
+    return sum;
+  }
+  function updateQualityInfo(rows){
+    const el = document.getElementById('qualityInfo'); if(!el) return;
+    if(!rows || !rows.length){ el.style.display='none'; el.textContent=''; return; }
+    el.style.display='inline-block'; el.textContent='Dist. total estimada: '+ totalDistanceKm(rows).toFixed(1) +' km';
+  }
+
+  // 6) Asignación robusta por algoritmo (sin eliminar tu assignVisits, sólo la envolvemos)
+  if (typeof window.assignVisits === 'function' && !window._origAssignVisits){
+    window._origAssignVisits = window.assignVisits;
+  }
+  function myAssign(rows, algo){
+    const includeSat = document.getElementById('chkSabado')?.checked || false;
+    const limit = Math.max(1, Number(document.getElementById('limitPerDay')?.value || 8));
+    const days = includeSat ? ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'] : ['Lunes','Martes','Miércoles','Jueves','Viernes'];
+    const weeks = [1,2,3,4];
+    const byVend={}; rows.forEach(r=>{ const k=r.vendedor||'Sin vendedor'; (byVend[k]??=[]).push(r); });
+    const result=[];
+
+    for(const [vend, items] of Object.entries(byVend)){
+      let remaining = items.slice();
+      for(const w of weeks){
+        if(!remaining.length) break;
+        const k = Math.min(days.length, remaining.length);
+        const points = remaining.map(r=>({lat:r.lat,lon:r.lon,ref:r}));
+        let dayBuckets=[];
+        if(algo==='kmeans'){
+          dayBuckets = kmeansGroups(points,k).map(g=>g.map(x=>x.ref));
+        }else if(algo==='nn'){
+          const nn = nearestPath(points).map(x=>x.ref);
+          dayBuckets = Array.from({length:k},()=>[]);
+          nn.forEach((r,i)=> dayBuckets[i%k].push(r));
+        }else{
+          const pol = polarOrder(points).map(x=>x.ref);
+          dayBuckets = Array.from({length:k},()=>[]);
+          pol.forEach((r,i)=> dayBuckets[i%k].push(r));
+        }
+        for(let dIdx=0; dIdx<k; dIdx++){
+          const bucket = dayBuckets[dIdx];
+          if(!bucket.length) continue;
+          const ordered = nearestPath(bucket);
+          const take = ordered.slice(0, limit);
+          take.forEach(r=> result.push({...r, semana:weeks[w], dia:days[dIdx]}));
+          const taken = new Set(take.map(x=>x.__id));
+          remaining = remaining.filter(r=> !taken.has(r.__id));
+        }
+      }
+      if(remaining.length){
+        const ord = nearestPath(remaining);
+        let wIdx=0,dIdx=0,cnt=0;
+        for(const r of ord){
+          result.push({...r, semana:weeks[wIdx], dia:days[dIdx]});
+          cnt++; if(cnt>=limit){ cnt=0; dIdx=(dIdx+1)%days.length; if(dIdx===0) wIdx=(wIdx+1)%weeks.length; }
+        }
+      }
+    }
+    return result;
+  }
+  window.assignVisits = function(rows){
+    const algo = document.getElementById('algo')?.value || 'kmeans';
+    try{
+      if (['kmeans','nn','polar'].includes(algo)) return myAssign(rows, algo);
+      if (typeof window._origAssignVisits === 'function') return window._origAssignVisits(rows);
+      return rows;
+    }catch(e){
+      console.error('assign fallback', e);
+      if (typeof window._origAssignVisits === 'function') return window._origAssignVisits(rows);
+      return rows;
+    }
+  };
+
+  // 7) Hook al render para dibujar rutas y calidad sin romper lo existente
+  if (typeof window.applyFiltersAndRender === 'function' && !window._origApply){
+    window._origApply = window.applyFiltersAndRender;
+    window.applyFiltersAndRender = function(){
+      try{ window._origApply(); }catch(e){ console.error(e); }
+      try{
+        const src = (typeof filteredPlan!=='undefined' && filteredPlan.length) ? filteredPlan : (typeof plan!=='undefined' ? plan : []);
+        if (window.routeLayer) drawRoutes(src);
+        updateQualityInfo(src);
+      }catch(e){ console.error('post-render', e); }
+    };
+  }
+
+  console.info('v1.1.8 listo');
+})();
+</script>
+
+
+<script>
+// --- v1.1.8: filtros en cascada + multi Vendedores ---
+(function(){
+  const $ = (q, root=document) => root.querySelector(q);
+  const $$ = (q, root=document) => Array.from(root.querySelectorAll(q));
+
+  function getSelectedMulti(sel){
+    if(!sel) return [];
+    return Array.from(sel.selectedOptions).map(o=>o.value).filter(v=>v!=='');
+  }
+  function setOptions(sel, values, keepSelected=true, withAll=true){
+    if(!sel) return;
+    const prev = keepSelected ? (sel.multiple ? getSelectedMulti(sel) : sel.value) : null;
+    sel.innerHTML='';
+    if(withAll && !sel.multiple){
+      const o = document.createElement('option'); o.value=''; o.textContent='(Todos)'; sel.appendChild(o);
+    }
+    values.forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
+    if(keepSelected){
+      if(sel.multiple && Array.isArray(prev)){
+        Array.from(sel.options).forEach(o=>{ if(prev.includes(o.value)) o.selected = true; });
+      }else if(typeof prev==='string'){
+        const ok = Array.from(sel.options).some(o=>o.value===prev);
+        sel.value = ok ? prev : '';
+      }
+    }
+  }
+
+  // filtro global (extiende el existente si lo hubiera)
+  window.filterState = window.filterState || { vendedor:'', empresa:'', provincia:'', semana:'', dia:'' };
+  // Ahora vendedor puede ser array
+  function readFilters(){
+    const vSel = $('#fltVendedor');
+    const v = vSel && vSel.multiple ? getSelectedMulti(vSel) : ($('#fltVendedor')?.value || '');
+    window.filterState.vendedor = v;
+    window.filterState.empresa  = $('#fltEmpresa')?.value || '';
+    window.filterState.provincia= $('#fltProvincia')?.value || '';
+    window.filterState.semana   = $('#fltSemana')?.value || '';
+    window.filterState.dia      = $('#fltDia')?.value || '';
+  }
+
+  function cascadeOptions(){
+    // usa el dataset actual (plan si existe; si no, mappedRows)
+    const base = (typeof plan!=='undefined' && plan.length) ? plan : (typeof mappedRows!=='undefined' ? mappedRows : []);
+    const fs = window.filterState || {};
+    // 1) por vendedores (multi)
+    let data = base.slice();
+    if(Array.isArray(fs.vendedor) && fs.vendedor.length){
+      data = data.filter(r=> fs.vendedor.includes(r.vendedor));
+    }else if(typeof fs.vendedor==='string' && fs.vendedor){
+      data = data.filter(r=> r.vendedor===fs.vendedor);
+    }
+    // 2) empresas válidas tras vendedores
+    const empresas = Array.from(new Set(data.map(r=>r.empresa).filter(Boolean))).sort((a,b)=>String(a).localeCompare(String(b),'es'));
+    setOptions($('#fltEmpresa'), empresas, true, true);
+    // 3) provincias válidas tras empresa
+    let data2 = data.slice();
+    if(fs.empresa){ data2 = data2.filter(r=> r.empresa===fs.empresa); }
+    const provincias = Array.from(new Set(data2.map(r=>r.provincia).filter(Boolean))).sort((a,b)=>String(a).localeCompare(String(b),'es'));
+    setOptions($('#fltProvincia'), provincias, true, true);
+    // 4) semanas válidas tras provincia
+    let data3 = data2.slice();
+    if(fs.provincia){ data3 = data3.filter(r=> r.provincia===fs.provincia); }
+    const semanas = Array.from(new Set(data3.map(r=> String(r.semana||'')).filter(Boolean))).sort((a,b)=>Number(a)-Number(b));
+    setOptions($('#fltSemana'), semanas, true, true);
+    // 5) días válidos tras semana
+    let data4 = data3.slice();
+    if(fs.semana){ data4 = data4.filter(r=> String(r.semana)===String(fs.semana)); }
+    const dias = Array.from(new Set(data4.map(r=> r.dia).filter(Boolean))).sort((a,b)=>String(a).localeCompare(String(b),'es'));
+    setOptions($('#fltDia'), dias, true, true);
+  }
+
+  // Hookear cambios
+  ['fltVendedor','fltEmpresa','fltProvincia','fltSemana','fltDia'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('change', ()=>{ readFilters(); if(typeof applyFiltersAndRender==='function'){ cascadeOptions(); applyFiltersAndRender(); } });
+  });
+
+  // Al cargar o tras generar plan, recalcular cascada
+  const origUpdate = window.updateFiltersUI;
+  window.updateFiltersUI = function(){
+    if(typeof origUpdate === 'function'){ origUpdate(); }
+    // hacer multi-select en vendedores y cargar opciones
+    const vSel = document.getElementById('fltVendedor');
+    if(vSel){ vSel.multiple = true; }
+    readFilters();
+    cascadeOptions();
+  };
+
+  // Integrar en render
+  const origApply = window.applyFiltersAndRender;
+  if(typeof origApply==='function'){
+    window.applyFiltersAndRender = function(){
+      if(typeof origApply==='function'){ origApply(); }
+      // re-aplicar cascada tras render para mantener consistencia
+      cascadeOptions();
+    };
+  }
+
+  console.info('v1.1.8 filtros en cascada + multi vendedores listo');
+})();
+</script>
+
 </body>
 </html>
