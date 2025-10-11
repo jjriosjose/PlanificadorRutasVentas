@@ -12,24 +12,23 @@
     body{ background:#f6f7fb; }
     .brand{ font-weight:800; letter-spacing:.2px; }
     .app-shell{ padding: 12px; }
-    .map{ height: 60vh; width: 100%; border-radius: .75rem; background:#f8fafc; display:flex; align-items:center; justify-content:center; color:#475569; }
+    #map, .leaflet-container { min-height:60vh !important; width:100%; border-radius:.75rem; background:#f8fafc; display:flex; align-items:center; justify-content:center; color:#475569; }
     .client-list{ max-height: 30vh; overflow:auto; border:1px solid #eee; border-radius:.5rem; padding:.5rem; background:white; }
     .client-item{ display:flex; align-items:center; gap:.5rem; padding:.4rem .3rem; border-bottom:1px dashed #eee; }
     .client-item:last-child{ border-bottom:none; }
     .client-name{ font-weight:600; }
-    .visited-row{ background: #f0fff4; }
+    .visited-row{ background:#f0fff4; }
     #mappingGrid label{ font-size:.8rem; color:var(--muted); }
     #mappingGrid select{ font-size:.85rem; }
     .section-title{ font-weight:700; font-size:1rem; color:#111827; }
-    .nav-link.active{ font-weight:600; }
-    .badge-dot{ width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; background:#22c55e; }
     .sticky-th{ position:sticky; top:0; z-index:1; }
     footer{ color:#6b7280; font-size:.85rem; }
+    .input-group .form-control::placeholder{ color:#94a3b8; }
   </style>
 </head>
 <body>
   <!-- Navbar/Menu -->
-  <nav class="navbar navbar-expand-lg bg-white shadow-sm">
+  <nav class="navbar navbar-expand-lg bg-white shadow-sm sticky-top">
     <div class="container-fluid">
       <a class="navbar-brand brand" href="#"><span class="text-primary">🧭 Planificador</span> de Ruta · RD</a>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#topMenu">
@@ -58,19 +57,25 @@
       <aside class="col-12 col-lg-4">
         <div class="card shadow-sm">
           <div class="card-body">
-            <div id="inicio" class="mb-2 section-title">Cargar Excel</div>
+            <div id="inicio" class="mb-2 section-title">Cargar datos</div>
             <p class="text-muted small mb-2">
-              Requiere conexión para librerías de Excel (SheetJS) y mapa (Leaflet). El mapeo de columnas se detecta solo y puedes ajustarlo.
+              Usa <b>Google Sheets publicado como CSV</b> (pega URL) o carga <b>Excel (.xlsx)</b> o <b>CSV</b> local. Luego ajusta el <b>mapeo</b> y pulsa <b>Procesar y asignar</b>.
             </p>
-            <div id="carga" class="mb-2">
-              <input id="fileInput" type="file" accept=".xlsx,.xls" class="form-control">
+
+            <div class="mb-2" id="carga">
+              <div class="input-group mb-2">
+                <span class="input-group-text">Google Sheets CSV</span>
+                <input id="sheetsUrl" class="form-control" placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv">
+                <button class="btn btn-outline-primary" id="btnLoadSheets">Cargar</button>
+              </div>
+              <div class="input-group">
+                <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" class="form-control">
+                <button class="btn btn-outline-secondary" id="btnApplyMapping" title="Aplica mapeo a los datos ya cargados">Aplicar</button>
+              </div>
             </div>
 
-            <div id="mappingBox" class="border rounded p-2 d-none">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <div class="fw-semibold">Mapeo de columnas</div>
-                <button id="btnApplyMapping" class="btn btn-sm btn-primary">Aplicar</button>
-              </div>
+            <div id="mappingBox" class="border rounded p-2 mt-2 d-none">
+              <div class="fw-semibold mb-2">Mapeo de columnas</div>
               <div id="mappingGrid" class="row g-2"></div>
             </div>
 
@@ -154,7 +159,7 @@
 
             <hr>
             <div id="ayuda" class="small text-muted">
-              <span class="badge-dot"></span>Consejo: si algo no carga en GitHub Pages, refresca con <code>Ctrl+F5</code> o revisa si tu red bloquea CDNs.
+              Publica tu Google Sheet en la web como <b>CSV</b> y pega el enlace. O sube un archivo <b>Excel/CSV</b>. Ajusta el mapeo → <b>Procesar</b>.
             </div>
           </div>
         </div>
@@ -164,7 +169,7 @@
       <main class="col-12 col-lg-8">
         <div id="mapa" class="card shadow-sm mb-3">
           <div class="card-body p-2">
-            <div id="map" class="map"><div id="mapNote" class="text-center">Mapa inicializando…</div></div>
+            <div id="map"><div id="mapNote" class="text-center">Mapa inicializando…</div></div>
           </div>
         </div>
         <div id="plan" class="card shadow-sm">
@@ -191,7 +196,8 @@
     </div>
   </div>
 
-  <!-- Loader util with fallbacks -->
+  <!-- Base libs: Bootstrap (CSS arriba). Leaflet & SheetJS con fallbacks -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script>
   async function loadScriptWithFallbacks(urls){
     for(const url of urls){
@@ -215,8 +221,8 @@
   }
   </script>
 
-  <!-- App logic -->
   <script>
+  // App State
   const DAYS_BASE = ["Lunes","Martes","Miércoles","Jueves","Viernes"];
   const EXPECTED = ["provincia","DIA","SEMANA","vendedor","gestor_servicio","cod_empresa","empresa","razon_social","latitud","longitud"];
   const DEFAULTS = { DIA:"", SEMANA:"", gestor_servicio:"", empresa:"", cod_empresa:"" };
@@ -240,11 +246,13 @@
   const mappingGrid = $("#mappingGrid");
   const btnApplyMapping = $("#btnApplyMapping");
   const mapNote = $("#mapNote");
+  const sheetsUrl = $("#sheetsUrl");
+  const btnLoadSheets = $("#btnLoadSheets");
 
-  let RAW_ROWS = [];
-  let PLAN_ROWS = [];
-  let HEADERS = [];
-  let MAPPING = {};
+  let RAW_ROWS = [];    // datos normalizados previo a plan
+  let PLAN_ROWS = [];   // datos con semana/día asignados
+  let HEADERS = [];     // encabezados detectados
+  let MAPPING = {};     // destino -> origen
   let map=null, markersLayer=null, mapReady=false;
 
   function toast(msg){ statusText.textContent = msg; }
@@ -254,10 +262,85 @@
   function saveVisited(obj){ localStorage.setItem(LS_KEY, JSON.stringify(obj)); }
   function clientKey(r){ return (r.cod_empresa && String(r.cod_empresa).trim()) || (r.empresa && String(r.empresa).trim()) || r.razon_social; }
 
+  // --- Map ---
+  async function ensureLeaflet(){
+    if(window.L && typeof L.map==="function") return true;
+    try{ await loadCSS("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"); }catch(e){}
+    const ok = await loadScriptWithFallbacks([
+      "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
+      "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
+    ]);
+    return ok;
+  }
+  async function initMap(){
+    const ok = await ensureLeaflet();
+    if(!ok){ mapNote.textContent = "No se pudo cargar Leaflet (revisar red/CDN)."; return; }
+    if(map) return;
+    map = L.map('map',{zoomControl:true}).setView([18.7357,-70.1627], 8);
+
+    const providers = [
+      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+      'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png'
+    ];
+    let added = false;
+    for (const url of providers){
+      try{ L.tileLayer(url,{maxZoom:19, attribution:'&copy; OpenStreetMap'}).addTo(map); added = true; break; }catch(e){}
+    }
+    if(!added){ mapNote.textContent = "No se pudo cargar la capa base."; return; }
+
+    const DefaultIcon = L.icon({
+      iconUrl:'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png',
+      iconRetinaUrl:'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+      shadowUrl:'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-shadow.png',
+      iconSize:[25,41], iconAnchor:[12,41], popupAnchor:[1,-34], shadowSize:[41,41]
+    });
+    L.Marker.prototype.options.icon = DefaultIcon;
+
+    markersLayer = L.layerGroup().addTo(map);
+    mapReady = true;
+    $("#map").innerHTML = "";
+    setTimeout(()=> map.invalidateSize(true), 150);
+    window.addEventListener('resize', ()=> map && map.invalidateSize());
+  }
+  function clearMap(){ if(mapReady && markersLayer) markersLayer.clearLayers(); }
+  function renderPins(rows){
+    if(!mapReady) return;
+    clearMap();
+    const bounds=[];
+    const visited = loadVisited();
+    rows.forEach(r=>{
+      const lat = parseCoord(r.latitud);
+      const lon = parseCoord(r.longitud);
+      if(!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+      const k = clientKey(r);
+      const isVisited = !!visited[k];
+      const m = L.marker([lat,lon], {opacity:isVisited?0.7:1}).addTo(markersLayer);
+      m.bindPopup(`<b>${escapeHTML(r.razon_social||"")}</b><br>${escapeHTML(r.empresa||"")} • ${escapeHTML(r.vendedor||"")}<br>S${r.SEMANA||""} • ${escapeHTML(r.DIA||"")}`);
+      bounds.push([lat,lon]);
+    });
+    if(bounds.length) map.fitBounds(bounds,{padding:[20,20]});
+  }
+
+  // --- Utils ---
   function escapeHTML(s){ return String(s||"").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
   function groupBy(arr, key){ const m=new Map(); arr.forEach(it=>{ const k=it[key]; if(!m.has(k)) m.set(k,[]); m.get(k).push(it);}); return m; }
-  function uniqSorted(arr){ return Array.from(new Set(arr.filter(Boolean))).sort((a,b)=> String(a).localeCompare(String(b),'es')); }
-  function toNum(x){ if(x===null||x===undefined||x==="") return null; const n = Number(String(x).replace(",", ".")); return Number.isFinite(n)?n:null; }
+  function uniqSorted(arr){ return Array.from(new Set(arr.filter(Boolean))).sort((a,b)=> String(a).localeCompare(String(b),'es',{numeric:true})); }
+
+  function parseCoord(val){
+    if(val==null || val==="") return NaN;
+    let s = String(val).trim();
+    s = s.replace(/[^0-9,\.\-]/g,'');
+    if(s.includes('.') && s.includes(',')) s = s.replace(/,/g,''); else s = s.replace(',', '.');
+    const n = parseFloat(s);
+    return Number.isFinite(n)? n : NaN;
+  }
+  function toNum(x){
+    if(x===null||x===undefined||x==="") return null;
+    const n = parseCoord(x);
+    return Number.isFinite(n)? n : null;
+  }
 
   const ALIASES = {
     "provincia":["provincia","estado","region"],
@@ -265,14 +348,15 @@
     "semana":["semana","nsemana","sem"],
     "vendedor":["vendedor","seller","rep","asesor","agente","comercial"],
     "gestor_servicio":["gestor_servicio","gestor","supervisor","coordinador","manager"],
-    "cod_empresa":["cod empresa","codempresa","codigoempresa","id","codigo"],
-    "empresa":["empresa","compania","compañia"],
-    "razon_social":["razonsocial","cliente","negocio","nombrecliente"],
-    "latitud":["latitud","lat","latitude"],
-    "longitud":["longitud","lon","lng","long","longitude"]
+    "cod_empresa":["cod empresa","codempresa","codigoempresa","id","codigo","cod_empresa","Cod Empresa","Cod_Empresa"],
+    "empresa":["empresa","compania","compañia","Empresa"],
+    "razon_social":["razonsocial","cliente","negocio","nombrecliente","razon_social","RazonSocial"],
+    "latitud":["latitud","lat","latitude","Latitud"],
+    "longitud":["longitud","lon","lng","long","longitude","Longitud"]
   };
   function norm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,""); }
 
+  // Mapping UI
   function autoMapping(headers){
     const nh = headers.map(h=>({raw:h, n:norm(h)}));
     const map = {};
@@ -283,19 +367,17 @@
         found = nh.find(h=> als.some(a=>h.n===norm(a)));
       }
       if(!found && t==="cod_empresa"){
-        found = nh.find(h=> h.n==="empresa" || h.n==="id");
+        found = nh.find(h=> h.n==="empresa" || h.n==="id" || h.raw==='Cod Empresa' || h.raw==='Cod_Empresa');
       }
       map[t] = found? found.raw : "(no usar)";
     }
     return map;
   }
-
   function buildMappingUI(headers){
     mappingGrid.innerHTML = "";
     const opts = ['(no usar)'].concat(headers);
     const current = autoMapping(headers);
     MAPPING = {...current};
-
     EXPECTED.forEach(target=>{
       const col = document.createElement('div');
       col.className = "col-12 col-md-6";
@@ -306,37 +388,109 @@
         </select>`;
       mappingGrid.appendChild(col);
     });
-
     mappingBox.classList.remove("d-none");
   }
 
-  function detectHeaderRow(matrix){
-    const must = ["provincia","vendedor","razon","cliente"];
-    for(let i=0;i<Math.min(30,matrix.length);i++){
-      const row = matrix[i].map(x=> String(x||"").toLowerCase());
-      const ok = must.filter(k=> row.some(c=> c.includes(k))).length >= 2;
-      if(ok) return i;
-    }
-    return 0;
-  }
-
-  function balanceWeeks(rows){
-    const n=rows.length; const target=Array.from({length:4},(_,i)=>Math.floor(n/4)+(i<(n%4)?1:0)); const counts=[0,0,0,0];
-    rows.forEach(r=> counts[r.SEMANA-1]++);
-    for(let pass=0;pass<6;pass++){
-      let moved=false;
-      for(let f=0; f<4; f++){
-        for(let t=0; t<4; t++){
-          if(counts[f]>target[f] && counts[t]<target[t]){
-            const idx = rows.findIndex(r=> r.SEMANA===f+1);
-            if(idx>=0){ rows[idx].SEMANA=t+1; counts[f]--; counts[t]++; moved=true; }
-          }
-        }
+  // CSV & Excel loaders
+  function parseCSV(text){
+    // Simple CSV parser (handles quotes and commas)
+    const rows=[]; let cur=[], field="", inQuotes=false;
+    for(let i=0;i<text.length;i++){
+      const c=text[i], n=text[i+1];
+      if(inQuotes){
+        if(c==='"' && n==='"'){ field+='"'; i++; }
+        else if(c==='"'){ inQuotes=false; }
+        else field+=c;
+      }else{
+        if(c===','){ cur.push(field); field=""; }
+        else if(c==='\n' || c==='\r'){ if(c==='\r' && n==='\n') i++; cur.push(field); field=""; rows.push(cur); cur=[]; }
+        else if(c==='"'){ inQuotes=true; }
+        else field+=c;
       }
-      if(!moved) break;
     }
+    if(field.length>0 || cur.length>0){ cur.push(field); rows.push(cur); }
+    return rows;
   }
 
+  async function loadFromSheets(url){
+    toast("Cargando Google Sheets...");
+    const resp = await fetch(url, {cache:'no-store'});
+    const text = await resp.text();
+    const matrix = parseCSV(text);
+    HEADERS = matrix[0];
+    const records = matrix.slice(1).filter(r=> r.some(x=> String(x).trim()!==""));
+    RAW_ROWS = records.map(r=>{
+      const o={}; HEADERS.forEach((h,i)=> o[h]=r[i]); return o;
+    });
+    buildMappingUI(HEADERS);
+    toast(`Hoja cargada: ${records.length} filas.`);
+  }
+
+  async function loadLocalFile(file){
+    const name = file.name.toLowerCase();
+    if(name.endsWith(".csv")){
+      const text = await file.text();
+      const matrix = parseCSV(text);
+      HEADERS = matrix[0];
+      const records = matrix.slice(1).filter(r=> r.some(x=> String(x).trim()!==""));
+      RAW_ROWS = records.map(r=>{ const o={}; HEADERS.forEach((h,i)=> o[h]=r[i]); return o; });
+      buildMappingUI(HEADERS);
+      toast(`CSV cargado: ${records.length} filas.`);
+      return;
+    }
+    // Excel via SheetJS
+    if(!(window.XLSX && XLSX.read)){
+      toast("Cargando librería Excel…");
+      const ok = await loadScriptWithFallbacks([
+        "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
+        "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"
+      ]);
+      if(!ok){ toast("No se pudo cargar SheetJS (red bloqueada)."); return; }
+    }
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, {type:"array"});
+    const wsname = wb.SheetNames[0];
+    const ws = wb.Sheets[wsname];
+    const matrix = XLSX.utils.sheet_to_json(ws, {header:1, defval:""});
+    HEADERS = matrix[0].map(String);
+    const records = matrix.slice(1).filter(r=> r.some(x=> String(x).trim()!==""));
+    RAW_ROWS = records.map(r=>{ const o={}; HEADERS.forEach((h,i)=> o[h]=r[i]); return o; });
+    buildMappingUI(HEADERS);
+    toast(`Excel cargado: ${records.length} filas (hoja: ${wsname}).`);
+  }
+
+  btnLoadSheets.addEventListener('click', async ()=>{
+    if(!sheetsUrl.value.trim()){ toast("Pega la URL de Google Sheets (CSV)."); return; }
+    await loadFromSheets(sheetsUrl.value.trim());
+  });
+  document.getElementById("fileInput").addEventListener("change", async (ev)=>{
+    const file = ev.target.files[0]; if(!file) return;
+    await loadLocalFile(file);
+  });
+
+  // Build normalized rows from mapping
+  function normalizeFromMapping(){
+    if(!HEADERS.length || !RAW_ROWS.length){ toast("Carga datos y aplica mapeo."); return []; }
+    const mapped = RAW_ROWS.map(row=>{
+      const obj={};
+      EXPECTED.forEach(t=>{
+        const src = MAPPING[t];
+        obj[t] = src && src!=="(no usar)" ? row[src] : (DEFAULTS[t]??"");
+      });
+      obj.latitud = toNum(obj.latitud);
+      obj.longitud = toNum(obj.longitud);
+      return obj;
+    });
+    return mapped;
+  }
+
+  btnApplyMapping.addEventListener("click", ()=>{
+    $$('[data-target]').forEach(s=> MAPPING[s.dataset.target] = s.value);
+    toast("Mapeo aplicado.");
+  });
+
+  // Plan
   function euclid(a,b){const dx=a[0]-b[0],dy=a[1]-b[1];return Math.hypot(dx,dy)}
   function mean(points){const s=[0,0];for(const p of points){s[0]+=p[0];s[1]+=p[1];}return [s[0]/points.length,s[1]/points.length]}
   function kmeans(points,k,maxIter=80){
@@ -369,9 +523,25 @@
     }
     return {labels,centers};
   }
-
+  function balanceWeeks(rows){
+    const n=rows.length; const target=Array.from({length:4},(_,i)=>Math.floor(n/4)+(i<(n%4)?1:0)); const counts=[0,0,0,0];
+    rows.forEach(r=> counts[r.SEMANA-1]++);
+    for(let pass=0;pass<6;pass++){
+      let moved=false;
+      for(let f=0; f<4; f++){
+        for(let t=0; t<4; t++){
+          if(counts[f]>target[f] && counts[t]<target[t]){
+            const idx = rows.findIndex(r=> r.SEMANA===f+1);
+            if(idx>=0){ rows[idx].SEMANA=t+1; counts[f]--; counts[t]++; moved=true; }
+          }
+        }
+      }
+      if(!moved) break;
+    }
+  }
   function assignPlan(data, mode="balance", perDayLimit="", includeSaturday=false){
-    const valid = data.map(r=> normalizeRow(r)).filter(r=> r.latitud!=null && r.longitud!=null && r.vendedor);
+    const valid = data.map(r=> ({...r, latitud:toNum(r.latitud), longitud:toNum(r.longitud)}))
+                      .filter(r=> r.latitud!=null && r.longitud!=null && r.vendedor);
     const byVend = groupBy(valid, "vendedor");
     const plan = [];
     const DAYS = includeSaturday ? [...DAYS_BASE, "Sábado"] : DAYS_BASE.slice();
@@ -458,30 +628,12 @@
       String(a.razon_social||"").localeCompare(String(b.razon_social||""),'es'));
   }
 
-  function normalizeRow(row){
-    if(HEADERS && !Object.keys(row).some(k=> EXPECTED.includes(k))){
-      const out={};
-      EXPECTED.forEach(t=>{
-        const src = MAPPING[t];
-        out[t] = src && src!=="(no usar)" ? row[src] : (DEFAULTS[t]??"");
-      });
-      out.latitud = toNum(out.latitud);
-      out.longitud = toNum(out.longitud);
-      return out;
-    } else {
-      const out = {...row};
-      out.latitud = toNum(out.latitud);
-      out.longitud = toNum(out.longitud);
-      return out;
-    }
-  }
-
+  // Filters + list/table
   function updateFilters(rows){
     filterVendedor.innerHTML = '<option value="">(Todos los vendedores)</option>' + uniqSorted(rows.map(r=> r.vendedor)).map(v=> `<option>${escapeHTML(v)}</option>`).join("");
     filterEmpresa.innerHTML = '<option value="">(Todas las empresas)</option>' + uniqSorted(rows.map(r=> r.empresa||r.cod_empresa)).map(v=> `<option>${escapeHTML(v)}</option>`).join("");
     filterProvincia.innerHTML = '<option value="">(Todas las provincias)</option>' + uniqSorted(rows.map(r=> r.provincia)).map(v=> `<option>${escapeHTML(v)}</option>`).join("");
   }
-
   function renderList(rows){
     const visited = loadVisited();
     listContainer.innerHTML = rows.map(r=>{
@@ -500,7 +652,7 @@
 
     $$("#listContainer [data-act='go']").forEach(btn=>{
       btn.addEventListener("click", ()=>{
-        const lat = Number(btn.dataset.lat), lon = Number(btn.dataset.lon);
+        const lat = parseCoord(btn.dataset.lat), lon = parseCoord(btn.dataset.lon);
         if(Number.isFinite(lat) && Number.isFinite(lon) && mapReady){
           map.setView([lat,lon], 15);
         }
@@ -513,11 +665,10 @@
         if(chk.checked) st[key]=true; else delete st[key];
         saveVisited(st);
         renderTable(currentFiltered());
-        addMarkers(currentFiltered());
+        renderPins(currentFiltered());
       });
     });
   }
-
   function renderTable(rows){
     const visited = loadVisited();
     tblBody.innerHTML = rows.map(r=>{
@@ -532,8 +683,8 @@
         <td>${escapeHTML(r.gestor_servicio||"")}</td>
         <td>${escapeHTML(r.empresa||r.cod_empresa||"")}</td>
         <td>${escapeHTML(r.razon_social||"")}</td>
-        <td>${r.latitud!=null? Number(r.latitud).toFixed(6):""}</td>
-        <td>${r.longitud!=null? Number(r.longitud).toFixed(6):""}</td>
+        <td>${r.latitud!=null && r.latitud!==""? Number(parseCoord(r.latitud)).toFixed(6):""}</td>
+        <td>${r.longitud!=null && r.longitud!==""? Number(parseCoord(r.longitud)).toFixed(6):""}</td>
         <td><input type="checkbox" data-act="vis-table" data-key="${escapeHTML(k)}" ${isVisited?"checked":""}></td>
       </tr>`;
     }).join("");
@@ -546,12 +697,11 @@
         if(chk.checked) st[key]=true; else delete st[key];
         saveVisited(st);
         renderList(currentFiltered());
-        addMarkers(currentFiltered());
+        renderPins(currentFiltered());
         renderTable(currentFiltered());
       });
     });
   }
-
   function currentFiltered(){
     const s = txtSearch.value.trim().toLowerCase();
     const v = filterVendedor.value;
@@ -572,28 +722,23 @@
       return true;
     });
   }
-
   function refreshAll(){
-    updateFilters(RAW_ROWS.map(normalizeRow));
     if(PLAN_ROWS.length){
+      updateFilters(PLAN_ROWS);
       const rows = currentFiltered();
       renderList(rows);
       renderTable(rows);
-      addMarkers(rows);
+      renderPins(rows);
     }
   }
 
-  // Actions
-  $("#btnProcess").addEventListener("click", ()=>{
-    if(!RAW_ROWS.length){ toast("Primero carga un Excel y aplica mapeo si es necesario."); return; }
-    const normalized = RAW_ROWS.map(r=> normalizeRow(r));
-    const perDayLimit = limitSel.value;
-    PLAN_ROWS = assignPlan(normalized, modeSel.value, perDayLimit, chkSaturday.checked);
-    updateFilters(PLAN_ROWS);
-    const rows = currentFiltered();
-    renderList(rows);
-    renderTable(rows);
-    addMarkers(rows);
+  // Buttons
+  $("#btnProcess").addEventListener("click", async ()=>{
+    await initMap();
+    const base = normalizeFromMapping();
+    if(!base.length){ toast("Primero carga datos y aplica el mapeo."); return; }
+    PLAN_ROWS = assignPlan(base, modeSel.value, limitSel.value, chkSaturday.checked);
+    refreshAll();
     toast(`Plan generado: ${PLAN_ROWS.length} filas.`);
   });
 
@@ -608,7 +753,7 @@
     a.href = url; a.download = "Plan_Rutas_Filtrado.csv"; a.click();
     URL.revokeObjectURL(url);
   });
-  function csvCell(v){ if(v==null) return ""; const s = String(v).replace(/"/g,'""'); if(/[",\n]/.test(s)) return '"' + s + '"'; return s; }
+  function csvCell(v){ if(v==null) return ""; const s = String(v).replace(/"/g,'""'); if(/["\n,]/.test(s)) return '"' + s + '"'; return s; }
 
   $("#btnClear").addEventListener("click", ()=>{
     RAW_ROWS=[]; PLAN_ROWS=[]; HEADERS=[]; MAPPING={};
@@ -623,129 +768,18 @@
       const rows = currentFiltered();
       renderList(rows);
       renderTable(rows);
-      addMarkers(rows);
+      renderPins(rows);
     });
   });
   txtSearch.addEventListener("input", ()=>{
     const rows = currentFiltered();
     renderList(rows);
     renderTable(rows);
-    addMarkers(rows);
+    renderPins(rows);
   });
 
-  // File input with XLSX fallback loader
-  document.getElementById("fileInput").addEventListener("change", async (ev)=>{
-    if(!(window.XLSX && XLSX.read)){
-      toast("Cargando librería Excel…");
-      const ok = await loadScriptWithFallbacks([
-        "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
-        "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
-        "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"
-      ]);
-      if(!ok){ toast("No se pudo cargar SheetJS (red bloqueada)."); return; }
-    }
-    const file = ev.target.files[0];
-    if(!file) return;
-    const data = await file.arrayBuffer();
-    const wb = XLSX.read(data, {type:"array"});
-    const wsname = wb.SheetNames[0];
-    const ws = wb.Sheets[wsname];
-    const matrix = XLSX.utils.sheet_to_json(ws, {header:1, defval:""});
-    const hdrIdx = detectHeaderRow(matrix);
-    const headers = matrix[hdrIdx].map(String);
-    const records = matrix.slice(hdrIdx+1).filter(r=> r.some(x=> String(x).trim()!==""));
-    HEADERS = headers;
-    RAW_ROWS = records.map(r=>{
-      const o = {}; headers.forEach((h,i)=> o[h] = r[i]); return o;
-    });
-    RAW_ROWS.__source_matrix = records.map(r=> r.slice());
-    buildMappingUI(headers);
-    toast(`Excel cargado: ${records.length} filas (hoja: ${wsname}).`);
-  });
-
-  // Init map with Leaflet fallbacks
-  async function initMap(){
-    if(!(window.L && typeof L.map==="function")){
-      // ensure CSS
-      try{
-        await loadCSS("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css");
-      }catch(e){/* ignore */}
-      const ok = await loadScriptWithFallbacks([
-        "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
-        "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js",
-        "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
-      ]);
-      if(!ok){
-        mapReady=false; mapNote.textContent = "No se pudo cargar Leaflet (revisar red/CDN).";
-        return;
-      }
-    }
-    map = L.map('map').setView([18.7357, -70.1627], 7);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap'}).addTo(map);
-    markersLayer = L.layerGroup().addTo(map);
-    mapReady=true;
-    $("#map").innerHTML="";
-  }
-  function addMarkers(rows){
-    if(!mapReady) return;
-    markersLayer.clearLayers();
-    let bounds = [];
-    const visited = loadVisited();
-    rows.forEach(r=>{
-      if(r.latitud==null || r.longitud==null) return;
-      const k = clientKey(r);
-      const isVisited = !!visited[k];
-      const marker = L.marker([Number(r.latitud), Number(r.longitud)], {opacity: isVisited ? 0.6 : 1});
-      const html = `
-        <div>
-          <div class="fw-bold">${escapeHTML(r.razon_social||"")}</div>
-          <div class="small text-muted">${escapeHTML(r.empresa||"")} · ${escapeHTML(r.vendedor||"")}</div>
-          <div class="small">Provincia: ${escapeHTML(r.provincia||"")}</div>
-          <div class="small">Semana ${r.SEMANA||""} · ${r.DIA||""}</div>
-          <div class="form-check mt-2">
-            <input class="form-check-input" type="checkbox" id="chk_${encodeURIComponent(k)}" ${isVisited?"checked":""}>
-            <label class="form-check-label small">Visitado</label>
-          </div>
-        </div>`;
-      marker.bindPopup(html);
-      marker.on('popupopen',()=>{
-        const el = document.getElementById(`chk_${encodeURIComponent(k)}`);
-        if(el){
-          el.addEventListener('change', (ev)=> {
-            const st = loadVisited();
-            if(ev.target.checked){ st[k]=true; } else { delete st[k]; }
-            saveVisited(st);
-            renderList(currentFiltered());
-            renderTable(currentFiltered());
-            addMarkers(currentFiltered());
-          });
-        }
-      });
-      marker.addTo(markersLayer);
-      bounds.push([Number(r.latitud), Number(r.longitud)]);
-    });
-    if(bounds.length) map.fitBounds(bounds, {padding:[30,30]});
-  }
-
-  // Datos demo
-  const DEMO = [
-    {provincia:"La Altagracia", vendedor:"Ana", gestor_servicio:"Luis", empresa:"FW", cod_empresa:"FW-001", razon_social:"Ferretería Bávaro", latitud:18.706, longitud:-68.451},
-    {provincia:"La Altagracia", vendedor:"Ana", gestor_servicio:"Luis", empresa:"FW", cod_empresa:"FW-002", razon_social:"Total Tools Verón", latitud:18.567, longitud:-68.396},
-    {provincia:"Distrito Nacional", vendedor:"Carlos", gestor_servicio:"María", empresa:"AK", cod_empresa:"AK-010", razon_social:"HogarCenter", latitud:18.469, longitud:-69.891},
-    {provincia:"Santiago", vendedor:"Carlos", gestor_servicio:"María", empresa:"AK", cod_empresa:"AK-011", razon_social:"Ferre Norte", latitud:19.468, longitud:-70.699},
-    {provincia:"San Cristóbal", vendedor:"Ana", gestor_servicio:"Luis", empresa:"FW", cod_empresa:"FW-003", razon_social:"El Tornillo", latitud:18.415, longitud:-70.106},
-    {provincia:"La Vega", vendedor:"Pedro", gestor_servicio:"Carmen", empresa:"FW", cod_empresa:"FW-004", razon_social:"Construvega", latitud:19.222, longitud:-70.529},
-    {provincia:"Puerto Plata", vendedor:"Pedro", gestor_servicio:"Carmen", empresa:"AK", cod_empresa:"AK-012", razon_social:"Atlántico Tools", latitud:19.794, longitud:-70.694},
-  ];
-
-  // Boot
-  window.addEventListener("DOMContentLoaded", async ()=>{
-    await initMap();
-    PLAN_ROWS = assignPlan(DEMO, "balance", "8", false);
-    updateFilters(PLAN_ROWS);
-    const rows = currentFiltered();
-    renderList(rows); renderTable(rows); addMarkers(rows);
-  });
+  // Boot: initialize the map so it's always visible
+  document.addEventListener("DOMContentLoaded", ()=>{ initMap(); });
   </script>
 </body>
 </html>
