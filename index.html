@@ -1,411 +1,696 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Planificador de Ruta · RD (resiliente)</title>
-  <link rel="icon" href="data:;base64,=">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <style>
-    body{ background:#f6f7fb; }
-    .app-shell{ padding: 12px; }
-    #map, .leaflet-container{ min-height:60vh !important; width:100%; border-radius:.75rem; background:#f8fafc; display:flex; align-items:center; justify-content:center; color:#475569; }
-    .client-list{ max-height: 30vh; overflow:auto; border:1px solid #eee; border-radius:.5rem; padding:.5rem; background:white; }
-    .visited-row{ background:#f0fff4; }
-    .sticky-th{ position:sticky; top:0; z-index:1; }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Planificador de Ruta · RD — v1.1.2</title>
+
+<!-- Leaflet & plugins -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+<!-- XLSX & CSV -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<!-- Icons -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lucide-static@0.469.0/font/lucide.css">
+
+<style>
+:root{
+  --bg:#f7f8fb;
+  --panel:#ffffff;
+  --text:#1f2937;
+  --muted:#6b7280;
+  --brand:#0ea5e9;
+  --ok:#16a34a;
+  --warn:#f59e0b;
+  --danger:#ef4444;
+  --shadow: 0 10px 20px rgba(0,0,0,.06);
+  --radius:16px;
+  --radius-sm:10px;
+  --gap:14px;
+  --accent:#2563eb;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,Helvetica,sans-serif;
+  color:var(--text);
+  background:var(--bg);
+}
+header{
+  position:sticky; top:0; z-index:40;
+  backdrop-filter:saturate(1.2) blur(8px);
+  background:rgba(247,248,251,.75);
+  border-bottom:1px solid #e5e7eb;
+}
+.header-wrap{
+  max-width:1400px; margin:0 auto; padding:12px 18px;
+  display:flex; align-items:center; gap:12px; justify-content:space-between;
+}
+.brand{
+  display:flex; align-items:center; gap:12px;
+  font-weight:700; letter-spacing:.2px;
+}
+.badge{background:#e0f2fe;color:#0369a1;padding:4px 8px;border-radius:999px;font-size:12px;}
+.version{background:#ecfeff;color:#155e75;padding:4px 8px;border-radius:999px;font-size:12px;}
+
+.container{
+  max-width:1400px; margin:18px auto; padding:0 18px;
+  display:grid; grid-template-columns: 390px 1fr;
+  gap:18px;
+}
+@media (max-width: 1200px){
+  .container{ grid-template-columns: 1fr; }
+}
+
+.panel{
+  background:var(--panel);
+  border:1px solid #e5e7eb; border-radius:var(--radius);
+  box-shadow:var(--shadow);
+}
+.panel h3{margin:0; padding:14px 16px; border-bottom:1px solid #e5e7eb; font-size:16px}
+.section{padding:14px 16px; border-top:1px dashed #eef2f7}
+.row{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+label{font-size:12px; color:var(--muted); display:block; margin-bottom:6px}
+select,input[type="text"],input[type="number"]{
+  width:100%; padding:10px 12px; border-radius:10px; border:1px solid #e5e7eb; background:#fff;
+  font-size:14px; color:var(--text);
+}
+button{
+  border:0; padding:10px 14px; border-radius:12px; font-weight:600; cursor:pointer;
+}
+.btn{background:#0ea5e9;color:#fff}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-ghost{background:#eef2f7;color:#0f172a}
+.btn-green{background:var(--ok); color:#fff}
+.btn-red{background:var(--danger); color:#fff}
+
+.map-wrap{
+  display:grid; grid-template-rows: 52px 1fr minmax(340px, 45vh); gap:12px; height:calc(100vh - 120px);
+}
+.toolbar{
+  display:flex; gap:10px; align-items:center; padding:8px 10px;
+}
+.toolbar .spacer{flex:1}
+#map{width:100%; height:100%; border-radius:var(--radius); border:1px solid #e5e7eb}
+.table{
+  height:100%; overflow:auto; border:1px solid #e5e7eb; border-radius:var(--radius);
+}
+table{width:100%; border-collapse:separate; border-spacing:0}
+th,td{font-size:13px; padding:10px 8px; border-bottom:1px solid #eef2f7}
+th{position:sticky; top:0; background:#f8fafc; z-index:2; text-align:left}
+tfoot td{background:#fafafa; position:sticky; bottom:0}
+.chips{display:flex; gap:6px; flex-wrap:wrap}
+.chips .chip{background:#eef2ff;color:#3730a3;padding:4px 8px;font-size:12px;border-radius:999px}
+
+.small{font-size:12px; color:var(--muted)}
+hr.sep{border:0;border-top:1px dashed #e5e7eb;margin:12px 0}
+.checkbox{display:flex; gap:8px; align-items:center}
+.note{background:#f8fafc;border:1px dashed #e2e8f0;padding:10px;border-radius:12px;font-size:12px;color:#475569}
+
+footer{max-width:1400px;margin:16px auto 32px;padding:0 18px;color:#64748b;font-size:12px}
+kbd{background:#e2e8f0;border-radius:6px;padding:2px 6px}
+.badge-info{background:#ecfeff;color:#155e75;padding:3px 6px;border-radius:999px;font-size:11px;margin-left:6px}
+</style>
 </head>
 <body>
-  <nav class="navbar navbar-expand-lg bg-white shadow-sm sticky-top">
-    <div class="container-fluid">
-      <a class="navbar-brand" href="#"><b>🧭 Planificador</b> de Ruta · RD</a>
-      <div class="d-flex gap-2 small">
-        <span id="statusText" class="text-secondary">Listo.</span>
-        <a class="btn btn-sm btn-outline-primary" id="btnExportCSV">Exportar CSV</a>
-        <a class="btn btn-sm btn-outline-danger" id="btnClear">Limpiar</a>
-      </div>
+<header>
+  <div class="header-wrap">
+    <div class="brand">
+      <span class="lucide lucide-map-pin"></span>
+      <span>Planificador de Ruta · RD</span>
+      <span class="badge">Mapa + Plan</span>
     </div>
-  </nav>
-
-  <div class="container-fluid app-shell">
-    <div class="row g-3">
-      <aside class="col-12 col-lg-4">
-        <div class="card shadow-sm">
-          <div class="card-body">
-            <div class="mb-2">Cargar datos (Google Sheets CSV o Excel/CSV)</div>
-            <div class="input-group mb-2">
-              <span class="input-group-text">Sheets CSV</span>
-              <input id="sheetsUrl" class="form-control" placeholder="https://docs.google.com/.../pub?output=csv">
-              <button class="btn btn-outline-primary" id="btnLoadSheets">Cargar</button>
-            </div>
-            <div class="input-group mb-2">
-              <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" class="form-control">
-            </div>
-            <div id="mappingBox" class="border rounded p-2 d-none">
-              <div class="fw-semibold mb-2">Mapeo</div>
-              <div id="mappingGrid" class="row g-2"></div>
-              <button class="btn btn-sm btn-secondary mt-2" id="btnApplyMapping">Aplicar</button>
-            </div>
-            <hr>
-            <div class="row g-2">
-              <div class="col-6">
-                <label class="form-label small">Modo</label>
-                <select id="mode" class="form-select form-select-sm">
-                  <option value="balance">Balanceado + Cercanía</option>
-                  <option value="pure">Pura cercanía</option>
-                </select>
-              </div>
-              <div class="col-6">
-                <label class="form-label small">Límite/día</label>
-                <select id="limit" class="form-select form-select-sm">
-                  <option value="">Sin límite</option><option>6</option><option selected>8</option><option>10</option><option>12</option>
-                </select>
-              </div>
-              <div class="col-12">
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" id="chkSaturday">
-                  <label class="form-check-label small" for="chkSaturday">Incluir sábado</label>
-                </div>
-              </div>
-              <div class="col-12">
-                <button id="btnProcess" class="btn btn-success w-100">Procesar y asignar</button>
-              </div>
-            </div>
-            <hr>
-            <div class="row g-2">
-              <div class="col-12"><input id="txtSearch" class="form-control form-control-sm" placeholder="Buscar..."></div>
-              <div class="col-6"><select id="filterVendedor" class="form-select form-select-sm"><option value="">(Vendedores)</option></select></div>
-              <div class="col-6"><select id="filterEmpresa" class="form-select form-select-sm"><option value="">(Empresas)</option></select></div>
-              <div class="col-12"><select id="filterProvincia" class="form-select form-select-sm"><option value="">(Provincias)</option></select></div>
-              <div class="col-12"><select id="filterSemana" class="form-select form-select-sm"><option value="">(Semanas)</option><option>1</option><option>2</option><option>3</option><option>4</option></select></div>
-              <div class="col-12"><select id="filterDia" class="form-select form-select-sm"><option value="">(Días)</option><option>Lunes</option><option>Martes</option><option>Miércoles</option><option>Jueves</option><option>Viernes</option><option>Sábado</option></select></div>
-            </div>
-            <hr>
-            <div class="small text-muted">Tip: si el mapa no carga, esta versión cambia automáticamente de servidor de mapas.</div>
-          </div>
-        </div>
-      </aside>
-      <main class="col-12 col-lg-8">
-        <div class="card shadow-sm mb-3"><div class="card-body p-2"><div id="map"><div id="mapNote">Mapa inicializando…</div></div></div></div>
-        <div class="card shadow-sm">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="fw-bold">Plan (vista actual)</div>
-              <span class="badge bg-secondary" id="badgeCount">0</span>
-            </div>
-            <div class="table-responsive">
-              <table class="table table-sm align-middle" id="tblPlan">
-                <thead class="table-light sticky-th">
-                  <tr><th>Provincia</th><th>Día</th><th>Semana</th><th>Vendedor</th><th>Gestor</th><th>Empresa</th><th>Razón Social</th><th>Lat</th><th>Lon</th><th>Visitado</th></tr>
-                </thead><tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </main>
+    <div class="chips">
+      <span class="chip">Semanas 1–4</span>
+      <span class="chip">Lun–Vie, Sáb opcional</span>
+      <span class="version">v1.1.2</span>
     </div>
   </div>
+</header>
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script>
-  async function loadScriptWithFallbacks(urls){
-    for(const url of urls){
-      try{
-        await new Promise((res, rej)=>{
-          const s = document.createElement('script'); s.src=url; s.async=true;
-          s.onload=()=>res(); s.onerror=()=>rej();
-          document.head.appendChild(s);
-        });
-        return true;
-      }catch(e){}
-    } return false;
+<main class="container">
+  <!-- Sidebar -->
+  <aside class="panel" id="sidebar">
+    <h3>Cargar datos (Google Sheets CSV o Excel/CSV)</h3>
+    <div class="section">
+      <div class="row" style="grid-template-columns:1fr auto">
+        <input id="gsheetUrl" type="text" placeholder="https://docs.google.com/.../pub?output=csv">
+        <button class="btn" id="btnLoadGSheet">Cargar</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label>Seleccionar archivo</label>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
+      </div>
+      <div class="note" style="margin-top:10px">
+        Acepta columnas típicas: <b>provincia, gestor_servicio, vendedor, empresa, razon_social, latitud, longitud</b>.
+        Puedes mapear nombres distintos en la sección siguiente.
+      </div>
+    </div>
+
+    <h3>Mapeo</h3>
+    <div class="section" id="mapping">
+      <div class="row">
+        <div><label>provincia</label><select id="map-provincia"></select></div>
+        <div><label>DÍA</label><select id="map-dia"></select></div>
+        <div><label>SEMANA</label><select id="map-semana"></select></div>
+        <div><label>vendedor</label><select id="map-vendedor"></select></div>
+        <div><label>gestor_servicio</label><select id="map-gestor"></select></div>
+        <div><label>cod_empresa</label><select id="map-codempresa"></select></div>
+        <div><label>empresa</label><select id="map-empresa"></select></div>
+        <div><label>razon_social</label><select id="map-razon"></select></div>
+        <div><label>latitud</label><select id="map-lat"></select></div>
+        <div><label>longitud</label><select id="map-lon"></select></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn-ghost" id="btnAutoMap">Autodetectar</button>
+        <button class="btn" id="btnApplyMap">Aplicar</button>
+      </div>
+    </div>
+
+    <h3>Asignación & preferencias</h3>
+    <div class="section">
+      <div class="row">
+        <div>
+          <label>Modo</label>
+          <select id="mode">
+            <option>Balanceado + Cercanía</option>
+            <option>Sólo cercanía</option>
+            <option>Balanceado</option>
+          </select>
+        </div>
+        <div>
+          <label>Límite/día</label>
+          <input id="limitPerDay" type="number" min="1" value="8"/>
+        </div>
+      </div>
+      <div class="checkbox" style="margin-top:10px">
+        <input type="checkbox" id="chkSabado" />
+        <label for="chkSabado">Incluir sábado</label>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:12px">
+        <button class="btn-green" id="btnProcesar">Procesar y asignar</button>
+        <button class="btn-red" id="btnLimpiar">Limpiar</button>
+      </div>
+      <hr class="sep"/>
+      <div class="row">
+        <div>
+          <label>Buscar…</label>
+          <input type="text" id="searchBox" placeholder="Razón social / vendedor / gestor / empresa" />
+        </div>
+        <div>
+          <label>Centro inicial del mapa</label>
+          <input type="text" id="mapCenter" placeholder="18.735693,-70.162651 (RD)" value="18.735693,-70.162651"/>
+        </div>
+      </div>
+      <div class="small" style="margin-top:8px">Consejo: guarda tus mapeos y preferencias en el navegador.</div>
+      <div style="display:flex; gap:8px; margin-top:10px">
+        <button class="btn-ghost" id="btnGuardarPrefs">Guardar prefs</button>
+        <button class="btn-ghost" id="btnCargarPrefs">Cargar prefs</button>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- Map + Table -->
+  <section class="panel map-wrap">
+    <div class="toolbar">
+      <div class="chips">
+        <span class="chip" title="Semana 1 a 4 del mes">Semanas</span>
+        <span class="chip">Filtros rápidos</span>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn-ghost" id="btnFit">Enfocar RD</button>
+      <button class="btn-ghost" id="btnExportCSV">Exportar CSV</button>
+      <button class="btn" id="btnExportXLSX">Exportar Excel</button>
+    </div>
+
+    <!-- Filtros (editables y combinables) -->
+    <div class="section" style="padding:10px 12px; border:1px dashed #e5e7eb; margin:0 12px; border-radius:12px">
+      <div class="row" style="grid-template-columns: repeat(5, 1fr); gap:10px">
+        <div><label>Vendedores<span class="badge-info" id="vendCount"></span></label><select id="fltVendedor"></select></div>
+        <div><label>Empresas</label><select id="fltEmpresa"></select></div>
+        <div><label>Provincias</label><select id="fltProvincia"></select></div>
+        <div><label>Semanas</label><select id="fltSemana"></select></div>
+        <div><label>Días</label><select id="fltDia"></select></div>
+      </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="table">
+      <table id="planTable">
+        <thead>
+          <tr>
+            <th>Provincia</th>
+            <th>Día</th>
+            <th>Semana</th>
+            <th>Vendedor</th>
+            <th>Gestor</th>
+            <th>Empresa</th>
+            <th>Razón Social</th>
+            <th>Lat</th>
+            <th>Lon</th>
+            <th>Visitado</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+        <tfoot>
+          <tr><td colspan="10" id="tableInfo">0 clientes en el plan.</td></tr>
+        </tfoot>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div>Planificador de Ruta · RD — <b>v1.1.2</b>. Entrega con filtros, edición en tabla, Excel y diseño responsive para PC.</div>
+  <div class="small">Soporta Google Sheets (CSV público) y archivos Excel/CSV locales. El mapa usa <a href="https://leafletjs.com" target="_blank">Leaflet</a>.</div>
+</footer>
+
+<script>
+/* ---------- Utilidades ---------- */
+const $ = (q, root=document) => root.querySelector(q);
+const $$ = (q, root=document) => Array.from(root.querySelectorAll(q));
+const haversine = (a, b) => {
+  const toRad = d => d*Math.PI/180;
+  const R = 6371;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const lat1 = toRad(a.lat), lat2 = toRad(b.lat);
+  const hh = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(hh));
+};
+const clean = v => (v==null ? "" : String(v).trim());
+
+function uniq(arr){ return Array.from(new Set(arr.filter(Boolean))).sort((a,b)=>String(a).localeCompare(String(b),'es')); }
+function fillSelect(sel, values, withAll=true, labelAll='(Todos)'){
+  sel.innerHTML = '';
+  if(withAll){ const o = document.createElement('option'); o.value=''; o.textContent=labelAll; sel.appendChild(o); }
+  values.forEach(v => { const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
+}
+
+/* ---------- Estado ---------- */
+let rawRows = [];      // filas originales (objetos con columnas)
+let mappedRows = [];   // filas con nombres estandar
+let layerCluster;      // cluster de marcadores
+let plan = [];         // plan resultante (asignado)
+let filteredPlan = []; // vista filtrada
+let vendors = []; let empresas=[]; let provincias=[];
+
+/* ---------- Mapa ---------- */
+const map = L.map('map', { zoomControl: true });
+const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap',
+  maxZoom: 19
+}).addTo(map);
+const rdBounds = L.latLngBounds([17.4,-72],[20.1,-68.1]);
+map.fitBounds(rdBounds);
+layerCluster = L.markerClusterGroup();
+map.addLayer(layerCluster);
+
+function fitRD(){
+  const v = $('#mapCenter').value.trim();
+  if(v && v.includes(',')){
+    const [lt, ln] = v.split(',').map(Number);
+    if(!Number.isNaN(lt) && !Number.isNaN(ln)){
+      map.setView([lt, ln], 7);
+      return;
+    }
   }
-  async function ensureLeaflet(){
-    if(window.L && L.map) return true;
-    return await loadScriptWithFallbacks([
-      "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
-      "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js",
-      "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
-    ]);
-  }
-  </script>
+  map.fitBounds(rdBounds);
+}
+$('#btnFit').addEventListener('click', fitRD);
 
-  <script>
-  const $ = s=>document.querySelector(s), $$ = s=>Array.from(document.querySelectorAll(s));
-  const statusText=$("#statusText"), tblBody=$("#tblPlan tbody"), badgeCount=$("#badgeCount");
-  const filterVendedor=$("#filterVendedor"), filterEmpresa=$("#filterEmpresa"), filterProvincia=$("#filterProvincia"), filterSemana=$("#filterSemana"), filterDia=$("#filterDia"), txtSearch=$("#txtSearch");
-  const mappingGrid=$("#mappingGrid"), mappingBox=$("#mappingBox");
-
-  const EXPECTED=["provincia","DIA","SEMANA","vendedor","gestor_servicio","cod_empresa","empresa","razon_social","latitud","longitud"];
-  const DEFAULTS={DIA:"",SEMANA:"",gestor_servicio:"",empresa:"",cod_empresa:""};
-  let RAW_ROWS=[], HEADERS=[], MAPPING={}, PLAN_ROWS=[];
-  let map=null, markers=null, mapReady=false, providerIndex=0;
-  const providers=[
-    {name:"OSM", url:'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'},
-    {name:"OSM HOT", url:'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png'},
-    {name:"Carto Light", url:'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'},
-    {name:"Carto Voyager", url:'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'},
-    {name:"Stadia", url:'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png'},
-    {name:"Esri Street", url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}'}
+/* ---------- Carga de datos ---------- */
+function headersFromRows(rows){
+  const set = new Set();
+  rows.forEach(r => Object.keys(r).forEach(k => set.add(k)));
+  return Array.from(set);
+}
+function fillMappingSelectors(headers){
+  const targets = [
+    'map-provincia','map-dia','map-semana','map-vendedor','map-gestor',
+    'map-codempresa','map-empresa','map-razon','map-lat','map-lon'
   ];
+  targets.forEach(id => {
+    const sel = $('#'+id);
+    sel.innerHTML = '<option value="">(no usar)</option>' + headers.map(h=>`<option>${h}</option>`).join('');
+  });
+}
+function tryAutoMap(headers){
+  const mapKeys = (name) => {
+    const lower = name.toLowerCase();
+    const candidates = headers.filter(h => h.toLowerCase()===lower || h.toLowerCase().includes(lower));
+    return candidates[0] || "";
+  };
+  $('#map-provincia').value = mapKeys('provincia');
+  $('#map-dia').value = mapKeys('dia');
+  $('#map-semana').value = mapKeys('semana');
+  $('#map-vendedor').value = mapKeys('vendedor');
+  $('#map-gestor').value = mapKeys('gestor_servicio') || mapKeys('gestor');
+  $('#map-codempresa').value = mapKeys('cod_empresa') || mapKeys('codigo_empresa');
+  $('#map-empresa').value = mapKeys('empresa');
+  $('#map-razon').value = mapKeys('razon_social') || mapKeys('razonsocial') || mapKeys('nombre');
+  $('#map-lat').value = mapKeys('latitud') || mapKeys('lat');
+  $('#map-lon').value = mapKeys('longitud') || mapKeys('lon') || mapKeys('lng');
+}
+function applyMapping(){
+  const m = {
+    provincia: $('#map-provincia').value,
+    dia: $('#map-dia').value,
+    semana: $('#map-semana').value,
+    vendedor: $('#map-vendedor').value,
+    gestor: $('#map-gestor').value,
+    cod_empresa: $('#map-codempresa').value,
+    empresa: $('#map-empresa').value,
+    razon: $('#map-razon').value,
+    lat: $('#map-lat').value,
+    lon: $('#map-lon').value,
+  };
+  mappedRows = rawRows.map((r, idx) => ({
+    __id: idx + 1,
+    provincia: clean(r[m.provincia]),
+    dia: clean(r[m.dia]) || '',
+    semana: Number(clean(r[m.semana])) || '',
+    vendedor: clean(r[m.vendedor]),
+    gestor: clean(r[m.gestor]) || 'NO ASIGNADO',
+    cod_empresa: clean(r[m.cod_empresa]),
+    empresa: clean(r[m.empresa]),
+    razon: clean(r[m.razon]),
+    lat: Number(clean(r[m.lat])),
+    lon: Number(clean(r[m.lon])),
+    visitado: ''
+  })).filter(x => !Number.isNaN(x.lat) && !Number.isNaN(x.lon));
+  vendors = uniq(mappedRows.map(x=>x.vendedor));
+  empresas = uniq(mappedRows.map(x=>x.empresa));
+  provincias = uniq(mappedRows.map(x=>x.provincia));
+  drawMarkers(mappedRows);
+  plan = []; updateFiltersUI(); updateTable([]);
+  $('#vendCount').textContent = vendors.length? `${vendors.length}` : '';
+}
+function updateFiltersUI(){
+  fillSelect($('#fltVendedor'), vendors);
+  fillSelect($('#fltEmpresa'), empresas);
+  fillSelect($('#fltProvincia'), provincias);
+  fillSelect($('#fltSemana'), [1,2,3,4].map(String));
+  fillSelect($('#fltDia'), ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']);
+}
 
-  function toast(m){ statusText.textContent=m; }
-  function parseCoord(v){ if(v==null||v==="") return NaN; let s=String(v).trim().replace(/[^0-9,\.\-]/g,''); if(s.includes('.')&&s.includes(',')) s=s.replace(/,/g,''); else s=s.replace(',', '.'); const n=parseFloat(s); return Number.isFinite(n)?n:NaN; }
-  function toNum(x){ const n=parseCoord(x); return Number.isFinite(n)?n:null; }
-  function escapeHTML(s){return String(s||"").replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+/* Google Sheets (CSV público) */
+$('#btnLoadGSheet').addEventListener('click', async () => {
+  const url = $('#gsheetUrl').value.trim();
+  if(!url) return alert('Pega una URL pública de Google Sheets con ?output=csv');
+  try{
+    const res = await fetch(url);
+    const text = await res.text();
+    const parsed = Papa.parse(text, { header:true, skipEmptyLines:true });
+    rawRows = parsed.data;
+    const headers = headersFromRows(rawRows);
+    fillMappingSelectors(headers);
+    tryAutoMap(headers);
+    alert('CSV cargado. Revisa el mapeo y pulsa Aplicar.');
+  }catch(e){
+    console.error(e);
+    alert('No se pudo cargar el CSV. Verifica que sea público.');
+  }
+});
 
-  async function initMap(){
-    const ok = await ensureLeaflet();
-    if(!ok){ $("#mapNote").textContent="No se pudo cargar Leaflet."; return; }
-    if(map) return;
-    map=L.map('map').setView([18.7357,-70.1627],8);
-    markers=L.layerGroup().addTo(map);
-    attachProvider(providerIndex);
-    $("#map").innerHTML="";
-    setTimeout(()=> map.invalidateSize(true),150);
+/* Archivos locales */
+$('#fileInput').addEventListener('change', async (ev) => {
+  const file = ev.target.files[0];
+  if(!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  if(ext === 'csv'){
+    const text = await file.text();
+    const parsed = Papa.parse(text, { header:true, skipEmptyLines:true });
+    rawRows = parsed.data;
+  }else{
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, { type:'array' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    rawRows = XLSX.utils.sheet_to_json(sheet, { defval:"" });
   }
-  function attachProvider(idx){
-    if(map._tileLayer) map.removeLayer(map._tileLayer);
-    const prov = providers[idx%providers.length];
-    const tl = L.tileLayer(prov.url, {maxZoom:19, attribution:'&copy; OpenStreetMap & contributors'});
-    map._tileLayer=tl.addTo(map);
-    tl.on('tileerror', ()=>{ // cambia automáticamente si hay error de tiles
-      providerIndex++; attachProvider(providerIndex);
-      toast("Cambiando servidor de mapas a: "+providers[(providerIndex)%providers.length].name);
-    });
-    const DefaultIcon = L.icon({
-      iconUrl:'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png',
-      iconRetinaUrl:'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-      shadowUrl:'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-shadow.png',
-      iconSize:[25,41], iconAnchor:[12,41], popupAnchor:[1,-34], shadowSize:[41,41]
-    });
-    L.Marker.prototype.options.icon = DefaultIcon;
-  }
-  function renderPins(rows){
-    if(!map) return;
-    markers.clearLayers();
-    const bounds=[];
-    rows.forEach(r=>{
-      const lat=parseCoord(r.latitud), lon=parseCoord(r.longitud);
-      if(!Number.isFinite(lat)||!Number.isFinite(lon)) return;
-      L.marker([lat,lon]).addTo(markers)
-       .bindPopup(`<b>${escapeHTML(r.razon_social||"")}</b><br>${escapeHTML(r.empresa||"")} • ${escapeHTML(r.vendedor||"")}<br>S${r.SEMANA||""} · ${escapeHTML(r.DIA||"")}`);
-      bounds.push([lat,lon]);
-    });
-    if(bounds.length) map.fitBounds(bounds,{padding:[20,20]});
-  }
+  const headers = headersFromRows(rawRows);
+  fillMappingSelectors(headers);
+  tryAutoMap(headers);
+  alert('Archivo cargado. Revisa el mapeo y pulsa Aplicar.');
+});
 
-  function uniqSorted(a){ return [...new Set(a.filter(Boolean))].sort((x,y)=> String(x).localeCompare(String(y),'es',{numeric:true})); }
-  function updateFilters(rows){
-    filterVendedor.innerHTML='<option value="">(Vendedores)</option>'+uniqSorted(rows.map(r=>r.vendedor)).map(v=>`<option>${escapeHTML(v)}</option>`).join('');
-    filterEmpresa.innerHTML='<option value="">(Empresas)</option>'+uniqSorted(rows.map(r=>r.empresa||r.cod_empresa)).map(v=>`<option>${escapeHTML(v)}</option>`).join('');
-    filterProvincia.innerHTML='<option value="">(Provincias)</option>'+uniqSorted(rows.map(r=>r.provincia)).map(v=>`<option>${escapeHTML(v)}</option>`).join('');
-  }
-  function renderTable(rows){
-    tblBody.innerHTML = rows.map(r=>`<tr>
-      <td>${escapeHTML(r.provincia||"")}</td><td>${escapeHTML(r.DIA||"")}</td><td>${escapeHTML(r.SEMANA||"")}</td>
-      <td>${escapeHTML(r.vendedor||"")}</td><td>${escapeHTML(r.gestor_servicio||"")}</td>
-      <td>${escapeHTML(r.empresa||r.cod_empresa||"")}</td><td>${escapeHTML(r.razon_social||"")}</td>
-      <td>${r.latitud?Number(parseCoord(r.latitud)).toFixed(6):""}</td><td>${r.longitud?Number(parseCoord(r.longitud)).toFixed(6):""}</td>
-      <td></td></tr>`).join('');
-    badgeCount.textContent = rows.length;
-  }
-  function currentFiltered(){
-    const s=txtSearch.value.trim().toLowerCase(), v=filterVendedor.value, e=filterEmpresa.value, p=filterProvincia.value, w=filterSemana.value, d=filterDia.value;
-    return PLAN_ROWS.filter(r=>{
-      if(v && r.vendedor!==v) return false;
-      if(e && (r.empresa||r.cod_empresa)!==e) return false;
-      if(p && r.provincia!==p) return false;
-      if(w && String(r.SEMANA)!==String(w)) return false;
-      if(d && r.DIA!==d) return false;
-      if(s && ![r.razon_social,r.empresa,r.cod_empresa,r.vendedor,r.provincia].some(x=> String(x||"").toLowerCase().includes(s))) return false;
-      return true;
-    });
-  }
+$('#btnAutoMap').addEventListener('click', () => tryAutoMap(headersFromRows(rawRows)));
+$('#btnApplyMap').addEventListener('click', applyMapping);
 
-  // Mapping
-  const ALIASES={provincia:["provincia","estado"], DIA:["dia","weekday"], SEMANA:["semana","sem"], vendedor:["vendedor","rep","asesor","agente"], gestor_servicio:["gestor","gestor_servicio"], cod_empresa:["cod empresa","cod_empresa","id","codigo"], empresa:["empresa","compania"], razon_social:["razonsocial","cliente","negocio"], latitud:["latitud","lat"], longitud:["longitud","lon","lng","long"]};
-  function norm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,""); }
-  function autoMapping(headers){
-    const nh=headers.map(h=>({raw:h, n:norm(h)})); const map={};
-    EXPECTED.forEach(t=>{
-      let hit=nh.find(h=>h.n===norm(t));
-      if(!hit){ const als=ALIASES[t]||[]; hit=nh.find(h=> als.some(a=>h.n===norm(a))); }
-      if(!hit && t==="cod_empresa"){ hit=nh.find(h=> h.n==="empresa"||h.n==="id"); }
-      map[t]=hit? hit.raw : "(no usar)";
-    });
-    return map;
-  }
-  function buildMappingUI(headers){
-    mappingGrid.innerHTML="";
-    const opts=['(no usar)'].concat(headers);
-    MAPPING=autoMapping(headers);
-    EXPECTED.forEach(t=>{
-      const d=document.createElement('div'); d.className="col-12 col-md-6";
-      d.innerHTML=`<label class="form-label">${t}</label>
-        <select class="form-select form-select-sm" data-target="${t}">
-          ${opts.map(h=>`<option ${MAPPING[t]===h?"selected":""}>${h}</option>`).join("")}
-        </select>`;
-      mappingGrid.appendChild(d);
-    });
-    mappingBox.classList.remove("d-none");
-  }
-  function normalizeFromMapping(){
-    if(!HEADERS.length||!RAW_ROWS.length){ toast("Carga datos y aplica mapeo."); return []; }
-    return RAW_ROWS.map(row=>{
-      const out={}; EXPECTED.forEach(t=>{ const src=MAPPING[t]; out[t]= src && src!=="(no usar)" ? row[src] : (DEFAULTS[t]||""); });
-      out.latitud=toNum(out.latitud); out.longitud=toNum(out.longitud);
-      return out;
-    });
-  }
+/* ---------- Asignación (Semanas 1–4, Lun–Vie + Sábado opcional) ---------- */
+function assignVisits(rows){
+  const includeSat = $('#chkSabado').checked;
+  const limit = Math.max(1, Number($('#limitPerDay').value) || 8);
 
-  // Loaders
-  function parseCSV(text){
-    const rows=[]; let cur=[], field="", inQ=false;
-    for(let i=0;i<text.length;i++){ const c=text[i], n=text[i+1];
-      if(inQ){ if(c=='"' && n=='"'){ field+='"'; i++; } else if(c=='"'){ inQ=false; } else field+=c; }
-      else { if(c==','){ cur.push(field); field=""; } else if(c=='\n' || c=='\r'){ if(c=='\r' && n=='\n') i++; cur.push(field); field=""; rows.push(cur); cur=[]; } else if(c=='"'){ inQ=true; } else field+=c; }
-    }
-    if(field.length>0 || cur.length>0){ cur.push(field); rows.push(cur); }
-    return rows;
-  }
-  async function loadFromSheets(url){
-    await initMap();
-    toast("Cargando Google Sheets...");
-    const resp = await fetch(url, {cache:'no-store'}); const text = await resp.text();
-    const matrix=parseCSV(text); HEADERS=matrix[0]; const records=matrix.slice(1).filter(r=> r.some(x=> String(x).trim()!==""));
-    RAW_ROWS = records.map(r=>{ const o={}; HEADERS.forEach((h,i)=> o[h]=r[i]); return o; });
-    buildMappingUI(HEADERS); toast(`Hoja cargada: ${records.length} filas.`);
-  }
-  async function loadLocalFile(file){
-    await initMap();
-    const name=file.name.toLowerCase();
-    if(name.endsWith(".csv")){
-      const text=await file.text(); const matrix=parseCSV(text); HEADERS=matrix[0];
-      const records=matrix.slice(1).filter(r=> r.some(x=> String(x).trim()!==""));
-      RAW_ROWS=records.map(r=>{ const o={}; HEADERS.forEach((h,i)=> o[h]=r[i]); return o; });
-      buildMappingUI(HEADERS); toast(`CSV cargado: ${records.length} filas.`); return;
-    }
-    if(!(window.XLSX && XLSX.read)){
-      const ok = await loadScriptWithFallbacks([
-        "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
-        "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
-        "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"
-      ]);
-      if(!ok){ toast("No se pudo cargar SheetJS."); return; }
-    }
-    const data=await file.arrayBuffer();
-    const wb=XLSX.read(data,{type:"array"}); const wsname=wb.SheetNames[0]; const ws=wb.Sheets[wsname];
-    const matrix=XLSX.utils.sheet_to_json(ws,{header:1,defval:""}); HEADERS=matrix[0].map(String);
-    const records=matrix.slice(1).filter(r=> r.some(x=> String(x).trim()!==""));
-    RAW_ROWS=records.map(r=>{ const o={}; HEADERS.forEach((h,i)=> o[h]=r[i]); return o; });
-    buildMappingUI(HEADERS); toast(`Excel cargado: ${records.length} filas (${wsname}).`);
-  }
+  const days = includeSat
+    ? ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
+    : ['Lunes','Martes','Miércoles','Jueves','Viernes'];
 
-  // Assign
-  function kmeans(points,k,maxIter=80){
-    function euclid(a,b){const dx=a[0]-b[0],dy=a[1]-b[1];return Math.hypot(dx,dy)}
-    function mean(ps){const s=[0,0];for(const p of ps){s[0]+=p[0];s[1]+=p[1];}return [s[0]/ps.length,s[1]/ps.length]}
-    if(points.length===0) return {labels:[],centers:[]};
-    if(k<=1 || points.length<=k){ const labels=points.map((_,i)=> i%k); const centers=Array.from({length:k},(_,i)=> mean(points.filter((_,j)=> labels[j]===i))); return {labels,centers}; }
-    const centers=[]; centers.push(points[Math.floor(Math.random()*points.length)]);
-    while(centers.length<k){ const d=points.map(p=> Math.min(...centers.map(c=> euclid(p,c)))); const sum=d.reduce((a,b)=>a+b,0)||1; let r=Math.random()*sum, idx=0; for(let i=0;i<d.length;i++){ r-=d[i]; if(r<=0){ idx=i; break; } } centers.push(points[idx]); }
-    let labels=new Array(points.length).fill(0);
-    for(let it=0; it<maxIter; it++){ let changed=false;
-      for(let i=0;i<points.length;i++){ let best=0,bd=Infinity; for(let c=0;c<centers.length;c++){ const dd=euclid(points[i],centers[c]); if(dd<bd){bd=dd;best=c;} } if(labels[i]!==best){ labels[i]=best; changed=true; } }
-      const groups=Array.from({length:k},()=>[]);
-      for(let i=0;i<points.length;i++) groups[labels[i]].push(points[i]);
-      for(let c=0;c<k;c++){ if(groups[c].length>0) centers[c]=mean(groups[c]); }
-      if(!changed) break;
-    }
-    return {labels,centers};
-  }
-  function balanceWeeks(rows){
-    const n=rows.length; const target=Array.from({length:4},(_,i)=>Math.floor(n/4)+(i<(n%4)?1:0)); const counts=[0,0,0,0];
-    rows.forEach(r=> counts[r.SEMANA-1]++);
-    for(let pass=0;pass<6;pass++){ let moved=false;
-      for(let f=0; f<4; f++){ for(let t=0; t<4; t++){ if(counts[f]>target[f] && counts[t]<target[t]){
-        const idx=rows.findIndex(r=> r.SEMANA===f+1); if(idx>=0){ rows[idx].SEMANA=t+1; counts[f]--; counts[t]++; moved=true; } } } }
-      if(!moved) break;
-    }
-  }
-  function assignPlan(data, mode="balance", perDayLimit="", includeSaturday=false){
-    const DAYS = includeSaturday? ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"] : ["Lunes","Martes","Miércoles","Jueves","Viernes"];
-    const valid=data.map(r=> ({...r, latitud:toNum(r.latitud), longitud:toNum(r.longitud)})).filter(r=> r.latitud!=null && r.longitud!=null && r.vendedor);
-    const byVend=new Map(); valid.forEach(r=>{ const k=r.vendedor; if(!byVend.has(k)) byVend.set(k,[]); byVend.get(k).push(r); });
-    const plan=[];
-    for(const [vend, items] of byVend){
-      const pts=items.map(r=>[Number(r.latitud),Number(r.longitud)]);
-      const wl = (items.length>=4)? kmeans(pts,4).labels : items.map((_,i)=> i%4);
-      items.forEach((r,i)=> r.SEMANA = (wl[i]%4)+1);
-      if(mode==="balance") balanceWeeks(items);
-      const byWeek=new Map(); items.forEach(r=>{ const k=r.SEMANA; if(!byWeek.has(k)) byWeek.set(k,[]); byWeek.get(k).push(r); });
-      for(const [w,rows] of byWeek){
-        const p=rows.map(r=>[Number(r.latitud),Number(r.longitud)]);
-        const k=Math.min(DAYS.length, Math.max(1, rows.length));
-        const dl = (rows.length>=2)? kmeans(p,k).labels : rows.map(_=>0);
-        const meta={};
-        for(let i=0;i<rows.length;i++){ const lab=dl[i]; if(!meta[lab]) meta[lab]={lat:0,lon:0,c:0}; meta[lab].lat+=rows[i].latitud; meta[lab].lon+=rows[i].longitud; meta[lab].c++; }
-        const ordered = Object.keys(meta).map(Number).sort((a,b)=>{
-          const A=meta[a],B=meta[b]; if((A.lat/A.c)!==(B.lat/B.c)) return (B.lat/B.c)-(A.lat/A.c); return (A.lon/A.c)-(B.lon/B.c);
-        });
-        const mapDay=new Map(); ordered.forEach((lab,idx)=> mapDay.set(lab, DAYS[idx%DAYS.length]));
-        rows.forEach((r,i)=> r.DIA = mapDay.get(dl[i]));
-        const limit = perDayLimit? Number(perDayLimit): null;
-        if(limit){ const byDay=new Map(); rows.forEach(r=>{ const k=r.DIA; if(!byDay.has(k)) byDay.set(k,[]); byDay.get(k).push(r); });
-          const order=DAYS.slice(0,k);
-          for(let pass=0; pass<6; pass++){ let moved=false;
-            for(const d of order){ const list=byDay.get(d)||[];
-              if(list.length>limit){ const extra=list.splice(limit);
-                for(const dd of order){ const dest=byDay.get(dd)||[]; while(extra.length && dest.length<limit){ const it=extra.shift(); it.DIA=dd; dest.push(it); moved=true; } byDay.set(dd,dest); if(!extra.length) break; }
-                while(extra.length){ const dd=order[Math.floor(Math.random()*order.length)]; const dest=byDay.get(dd)||[]; const it=extra.shift(); it.DIA=dd; dest.push(it); byDay.set(dd,dest); moved=true; }
-              }
-            }
-            if(!moved) break;
-          }
+  const weeks = [1,2,3,4];
+  const byVendedor = {};
+  rows.forEach(r => {
+    const key = r.vendedor || 'Sin vendedor';
+    (byVendedor[key] ||= []).push(r);
+  });
+
+  const result = [];
+  for(const [vend, items] of Object.entries(byVendedor)){
+    const pool = items.slice();
+    const ordered = [];
+    if(pool.length){
+      let current = pool.shift();
+      ordered.push(current);
+      while(pool.length){
+        let bestIdx = 0, bestDist = Infinity;
+        for(let i=0;i<pool.length;i++){
+          const d = haversine({lat:current.lat,lon:current.lon},{lat:pool[i].lat,lon:pool[i].lon});
+          if(d < bestDist){ bestDist = d; bestIdx = i; }
         }
-        rows.forEach(r=> plan.push({...r}));
+        current = pool.splice(bestIdx,1)[0];
+        ordered.push(current);
       }
     }
-    return plan.sort((a,b)=> (a.SEMANA-b.SEMANA) || DAYS.indexOf(a.DIA)-DAYS.indexOf(b.DIA) || String(a.vendedor||"").localeCompare(String(b.vendedor||""),'es') || String(a.razon_social||"").localeCompare(String(b.razon_social||""),'es'));
+    let ptr = 0;
+    for(const w of weeks){
+      for(const d of days){
+        for(let k=0; k<limit && ptr<ordered.length; k++, ptr++){
+          const r = ordered[ptr];
+          result.push({ ...r, semana:w, dia:d });
+        }
+      }
+    }
+    let wIdx = 0, dIdx = 0;
+    while(ptr < ordered.length){
+      const r = ordered[ptr++];
+      result.push({ ...r, semana:weeks[wIdx], dia:days[dIdx] });
+      dIdx++; if(dIdx>=days.length){ dIdx=0; wIdx=(wIdx+1)%weeks.length; }
+    }
   }
+  return result;
+}
+$('#btnProcesar').addEventListener('click', () => {
+  if(!mappedRows.length) return alert('Primero carga datos y aplica el mapeo.');
+  plan = assignVisits(mappedRows).map((r,i)=>({...r, __id: r.__id || (i+1), visitado: r.visitado || ''}));
+  vendors = uniq(plan.map(x=>x.vendedor)); $('#vendCount').textContent = vendors.length? `${vendors.length}` : '';
+  updateFiltersUI();
+  applyFiltersAndRender();
+  alert('Plan generado. Puedes editar Día/Semana/Vendedor en la tabla y filtrar arriba.');
+});
+$('#btnLimpiar').addEventListener('click', () => {
+  plan = []; mappedRows = []; rawRows = []; filteredPlan=[];
+  layerCluster.clearLayers();
+  $('#planTable tbody').innerHTML = '';
+  $('#tableInfo').textContent = '0 clientes en el plan.';
+  alert('Se limpió la vista. Vuelve a cargar datos.');
+});
 
-  // Actions
-  document.getElementById("btnLoadSheets").onclick = ()=>{
-    const url = document.getElementById("sheetsUrl").value.trim();
-    if(!url) return toast("Pega URL CSV de Google Sheets."); loadFromSheets(url);
-  };
-  document.getElementById("fileInput").addEventListener("change", async ev=>{
-    const f=ev.target.files[0]; if(!f) return; await loadLocalFile(f);
+/* ---------- Filtros ---------- */
+const filterState = { vendedor:'', empresa:'', provincia:'', semana:'', dia:'' };
+['fltVendedor','fltEmpresa','fltProvincia','fltSemana','fltDia'].forEach(id=>{
+  $('#'+id).addEventListener('change', ()=>{
+    filterState.vendedor = $('#fltVendedor').value;
+    filterState.empresa  = $('#fltEmpresa').value;
+    filterState.provincia= $('#fltProvincia').value;
+    filterState.semana   = $('#fltSemana').value;
+    filterState.dia      = $('#fltDia').value;
+    applyFiltersAndRender();
   });
-  document.getElementById("btnApplyMapping").onclick = ()=>{
-    $$("[data-target]").forEach(s=> MAPPING[s.dataset.target]=s.value); toast("Mapeo aplicado.");
-  };
-  document.getElementById("btnExportCSV").onclick = ()=>{
-    const rows=currentFiltered(); if(!rows.length) return toast("No hay datos.");
-    const headers=["provincia","DIA","SEMANA","vendedor","gestor_servicio","empresa","cod_empresa","razon_social","latitud","longitud"];
-    const csv=[headers.join(",")].concat(rows.map(r=> headers.map(h=>{const v=r[h]; if(v==null) return ""; const s=String(v).replace(/"/g,'""'); return /["\n,]/.test(s)?'"'+s+'"':s;}).join(","))).join("\n");
-    const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="Plan_Rutas_Filtrado.csv"; a.click(); URL.revokeObjectURL(url);
-  };
-  document.getElementById("btnClear").onclick = ()=>{
-    RAW_ROWS=[]; HEADERS=[]; MAPPING={}; PLAN_ROWS=[];
-    mappingGrid.innerHTML=""; mappingBox.classList.add("d-none"); tblBody.innerHTML=""; badgeCount.textContent="0";
-    if(markers) markers.clearLayers(); toast("Listo.");
-  };
+});
+$('#searchBox').addEventListener('input', ()=>applyFiltersAndRender());
 
-  [filterVendedor, filterEmpresa, filterProvincia, filterSemana, filterDia].forEach(el=> el.addEventListener("change", ()=>{
-    const rows=currentFiltered(); renderTable(rows); renderPins(rows);
+function applyFiltersAndRender(){
+  const q = $('#searchBox').value.trim().toLowerCase();
+  filteredPlan = plan.filter(r => {
+    if(filterState.vendedor && r.vendedor !== filterState.vendedor) return false;
+    if(filterState.empresa && r.empresa !== filterState.empresa) return false;
+    if(filterState.provincia && r.provincia !== filterState.provincia) return false;
+    if(filterState.semana && String(r.semana) !== String(filterState.semana)) return false;
+    if(filterState.dia && r.dia !== filterState.dia) return false;
+    if(q){
+      const hay = [r.razon, r.vendedor, r.gestor, r.empresa].join(' ').toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  updateTable(filteredPlan);
+  drawMarkers(filteredPlan);
+}
+
+/* ---------- Render de mapa y tabla ---------- */
+function drawMarkers(rows){
+  layerCluster.clearLayers();
+  const markers = rows.map(r => {
+    const mk = L.marker([r.lat, r.lon]);
+    const html = `
+      <b>${(r.razon || '(Sin nombre)')}</b><br>
+      <span class="small">${[r.empresa, r.provincia].filter(Boolean).join(' · ')}</span><br>
+      <span class="small">Vendedor: ${r.vendedor || '-'}</span><br>
+      <span class="small">Día/Sem: ${r.dia || '-'} / ${r.semana || '-'}</span>
+    `;
+    mk.bindPopup(html);
+    return mk;
+  });
+  markers.forEach(m => layerCluster.addLayer(m));
+  if(markers.length){
+    const g = L.featureGroup(markers);
+    map.fitBounds(g.getBounds().pad(0.2));
+  }else{
+    fitRD();
+  }
+}
+
+function updateTable(rows){
+  const tb = $('#planTable tbody');
+  const days = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const vendOptions = vendors.map(v=>`<option value="${v}">${v}</option>`).join('');
+  tb.innerHTML = rows.map((r,idx) => `
+    <tr data-id="${r.__id}">
+      <td>${r.provincia||''}</td>
+      <td>
+        <select class="edit-dia">
+          ${days.map(d => `<option value="${d}" ${r.dia===d?'selected':''}>${d}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <select class="edit-semana">
+          ${[1,2,3,4].map(w => `<option value="${w}" ${String(r.semana)===String(w)?'selected':''}>${w}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <select class="edit-vendedor">
+          <option value="">Sin vendedor</option>
+          ${vendOptions.replace(`value="${r.vendedor}"`, `value="${r.vendedor}" selected`)}
+        </select>
+      </td>
+      <td>${r.gestor||''}</td>
+      <td>${r.empresa||''}</td>
+      <td>${r.razon||''}</td>
+      <td>${Number.isFinite(r.lat)?r.lat.toFixed(6):''}</td>
+      <td>${Number.isFinite(r.lon)?r.lon.toFixed(6):''}</td>
+      <td style="text-align:center"><input type="checkbox" class="edit-visitado" ${r.visitado?'checked':''} /></td>
+    </tr>
+  `).join('');
+  $('#tableInfo').textContent = `${rows.length} clientes en el plan (filtrado).`;
+
+  // Listeners de edición
+  $$('#planTable .edit-dia').forEach(sel => sel.addEventListener('change', onEditChange));
+  $$('#planTable .edit-semana').forEach(sel => sel.addEventListener('change', onEditChange));
+  $$('#planTable .edit-vendedor').forEach(sel => sel.addEventListener('change', onEditChange));
+  $$('#planTable .edit-visitado').forEach(chk => chk.addEventListener('change', onEditChange));
+}
+
+function onEditChange(ev){
+  const tr = ev.target.closest('tr');
+  const id = Number(tr.dataset.id);
+  const row = plan.find(x => x.__id === id);
+  if(!row) return;
+  if(ev.target.classList.contains('edit-dia')) row.dia = ev.target.value;
+  if(ev.target.classList.contains('edit-semana')) row.semana = Number(ev.target.value);
+  if(ev.target.classList.contains('edit-vendedor')) row.vendedor = ev.target.value;
+  if(ev.target.classList.contains('edit-visitado')) row.visitado = ev.target.checked ? 'Sí' : '';
+  applyFiltersAndRender(); // actualiza mapa y tabla
+}
+
+/* ---------- Exportar ---------- */
+$('#btnExportCSV').addEventListener('click', () => {
+  const rows = (filteredPlan.length?filteredPlan:plan);
+  if(!rows.length) return alert('No hay plan para exportar.');
+  const arr = [
+    ['Provincia','Día','Semana','Vendedor','Gestor','Empresa','Razón Social','Lat','Lon','Visitado'],
+    ...rows.map(r => [r.provincia||'', r.dia||'', r.semana||'', r.vendedor||'', r.gestor||'', r.empresa||'', r.razon||'', r.lat||'', r.lon||'', r.visitado||''])
+  ];
+  const csv = arr.map(r => r.map(v => `"${String(v).replaceAll('"','""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'plan_visitas_v1.1.2.csv';
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 200);
+});
+
+$('#btnExportXLSX').addEventListener('click', () => {
+  const rows = (filteredPlan.length?filteredPlan:plan);
+  if(!rows.length) return alert('No hay plan para exportar.');
+  const data = rows.map(r => ({
+    Provincia: r.provincia||'',
+    Día: r.dia||'',
+    Semana: r.semana||'',
+    Vendedor: r.vendedor||'',
+    Gestor: r.gestor||'',
+    Empresa: r.empresa||'',
+    'Razón Social': r.razon||'',
+    Lat: r.lat||'',
+    Lon: r.lon||'',
+    Visitado: r.visitado||''
   }));
-  txtSearch.addEventListener("input", ()=>{ const rows=currentFiltered(); renderTable(rows); renderPins(rows); });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(data);
+  XLSX.utils.book_append_sheet(wb, ws, 'Ruta');
+  XLSX.writeFile(wb, 'plan_visitas_v1.1.2.xlsx');
+});
 
-  document.getElementById("btnProcess").onclick = ()=>{
-    const base = normalizeFromMapping(); if(!base.length) return toast("Carga datos y aplica mapeo.");
-    PLAN_ROWS = assignPlan(base, document.getElementById("mode").value, document.getElementById("limit").value, document.getElementById("chkSaturday").checked);
-    updateFilters(PLAN_ROWS); const rows=currentFiltered(); renderTable(rows); renderPins(rows); toast(`Plan generado: ${PLAN_ROWS.length} filas.`);
+/* ---------- Preferencias ---------- */
+$('#btnGuardarPrefs').addEventListener('click', () => {
+  const prefs = {
+    mapCenter: $('#mapCenter').value,
+    mode: $('#mode').value,
+    limit: $('#limitPerDay').value,
+    sabado: $('#chkSabado').checked,
+    mapping: {
+      provincia: $('#map-provincia').value,
+      dia: $('#map-dia').value,
+      semana: $('#map-semana').value,
+      vendedor: $('#map-vendedor').value,
+      gestor: $('#map-gestor').value,
+      cod_empresa: $('#map-codempresa').value,
+      empresa: $('#map-empresa').value,
+      razon: $('#map-razon').value,
+      lat: $('#map-lat').value,
+      lon: $('#map-lon').value,
+    }
   };
+  localStorage.setItem('planner_prefs', JSON.stringify(prefs));
+  alert('Preferencias guardadas.');
+});
 
-  document.addEventListener("DOMContentLoaded", ()=>{ initMap(); });
-  </script>
+$('#btnCargarPrefs').addEventListener('click', () => {
+  const raw = localStorage.getItem('planner_prefs');
+  if(!raw) return alert('No hay preferencias guardadas.');
+  const p = JSON.parse(raw);
+  $('#mapCenter').value = p.mapCenter || $('#mapCenter').value;
+  $('#mode').value = p.mode || $('#mode').value;
+  $('#limitPerDay').value = p.limit || $('#limitPerDay').value;
+  $('#chkSabado').checked = !!p.sabado;
+  alert('Preferencias cargadas. Si ya tienes datos, revisa el mapeo y pulsa Aplicar.');
+});
+</script>
 </body>
 </html>
