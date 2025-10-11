@@ -4,292 +4,176 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Planificador de Ruta · RD</title>
+  <title>Planificador de Ruta · RD (resiliente)</title>
   <link rel="icon" href="data:;base64,=">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    :root{ --muted:#6b7280; --accent:#2563eb; --ok:#16a34a; --warn:#dc2626; }
     body{ background:#f6f7fb; }
-    .brand{ font-weight:800; letter-spacing:.2px; }
     .app-shell{ padding: 12px; }
-    #map, .leaflet-container { min-height:60vh !important; width:100%; border-radius:.75rem; background:#f8fafc; display:flex; align-items:center; justify-content:center; color:#475569; }
+    #map, .leaflet-container{ min-height:60vh !important; width:100%; border-radius:.75rem; background:#f8fafc; display:flex; align-items:center; justify-content:center; color:#475569; }
     .client-list{ max-height: 30vh; overflow:auto; border:1px solid #eee; border-radius:.5rem; padding:.5rem; background:white; }
-    .client-item{ display:flex; align-items:center; gap:.5rem; padding:.4rem .3rem; border-bottom:1px dashed #eee; }
-    .client-item:last-child{ border-bottom:none; }
-    .client-name{ font-weight:600; }
     .visited-row{ background:#f0fff4; }
-    #mappingGrid label{ font-size:.8rem; color:var(--muted); }
-    #mappingGrid select{ font-size:.85rem; }
-    .section-title{ font-weight:700; font-size:1rem; color:#111827; }
     .sticky-th{ position:sticky; top:0; z-index:1; }
-    footer{ color:#6b7280; font-size:.85rem; }
-    .input-group .form-control::placeholder{ color:#94a3b8; }
   </style>
 </head>
 <body>
-  <!-- Navbar/Menu -->
   <nav class="navbar navbar-expand-lg bg-white shadow-sm sticky-top">
     <div class="container-fluid">
-      <a class="navbar-brand brand" href="#"><span class="text-primary">🧭 Planificador</span> de Ruta · RD</a>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#topMenu">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-      <div class="collapse navbar-collapse" id="topMenu">
-        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-          <li class="nav-item"><a class="nav-link active" href="#inicio">Inicio</a></li>
-          <li class="nav-item"><a class="nav-link" href="#carga">Cargar</a></li>
-          <li class="nav-item"><a class="nav-link" href="#mapa">Mapa</a></li>
-          <li class="nav-item"><a class="nav-link" href="#plan">Plan</a></li>
-          <li class="nav-item"><a class="nav-link" href="#ayuda">Ayuda</a></li>
-        </ul>
-        <div class="d-flex gap-2 small">
-          <span id="statusText" class="text-secondary">Listo.</span>
-          <a class="btn btn-sm btn-outline-primary" id="btnExportCSV">Exportar CSV</a>
-          <a class="btn btn-sm btn-outline-danger" id="btnClear">Limpiar</a>
-        </div>
+      <a class="navbar-brand" href="#"><b>🧭 Planificador</b> de Ruta · RD</a>
+      <div class="d-flex gap-2 small">
+        <span id="statusText" class="text-secondary">Listo.</span>
+        <a class="btn btn-sm btn-outline-primary" id="btnExportCSV">Exportar CSV</a>
+        <a class="btn btn-sm btn-outline-danger" id="btnClear">Limpiar</a>
       </div>
     </div>
   </nav>
 
   <div class="container-fluid app-shell">
     <div class="row g-3">
-      <!-- Panel lateral -->
       <aside class="col-12 col-lg-4">
         <div class="card shadow-sm">
           <div class="card-body">
-            <div id="inicio" class="mb-2 section-title">Cargar datos</div>
-            <p class="text-muted small mb-2">
-              Usa <b>Google Sheets publicado como CSV</b> (pega URL) o carga <b>Excel (.xlsx)</b> o <b>CSV</b> local. Luego ajusta el <b>mapeo</b> y pulsa <b>Procesar y asignar</b>.
-            </p>
-
-            <div class="mb-2" id="carga">
-              <div class="input-group mb-2">
-                <span class="input-group-text">Google Sheets CSV</span>
-                <input id="sheetsUrl" class="form-control" placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv">
-                <button class="btn btn-outline-primary" id="btnLoadSheets">Cargar</button>
-              </div>
-              <div class="input-group">
-                <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" class="form-control">
-                <button class="btn btn-outline-secondary" id="btnApplyMapping" title="Aplica mapeo a los datos ya cargados">Aplicar</button>
-              </div>
+            <div class="mb-2">Cargar datos (Google Sheets CSV o Excel/CSV)</div>
+            <div class="input-group mb-2">
+              <span class="input-group-text">Sheets CSV</span>
+              <input id="sheetsUrl" class="form-control" placeholder="https://docs.google.com/.../pub?output=csv">
+              <button class="btn btn-outline-primary" id="btnLoadSheets">Cargar</button>
             </div>
-
-            <div id="mappingBox" class="border rounded p-2 mt-2 d-none">
-              <div class="fw-semibold mb-2">Mapeo de columnas</div>
+            <div class="input-group mb-2">
+              <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" class="form-control">
+            </div>
+            <div id="mappingBox" class="border rounded p-2 d-none">
+              <div class="fw-semibold mb-2">Mapeo</div>
               <div id="mappingGrid" class="row g-2"></div>
+              <button class="btn btn-sm btn-secondary mt-2" id="btnApplyMapping">Aplicar</button>
             </div>
-
             <hr>
             <div class="row g-2">
-              <div class="col-12 col-md-6">
-                <label class="form-label small">Modo de asignación</label>
+              <div class="col-6">
+                <label class="form-label small">Modo</label>
                 <select id="mode" class="form-select form-select-sm">
                   <option value="balance">Balanceado + Cercanía</option>
                   <option value="pure">Pura cercanía</option>
                 </select>
               </div>
-              <div class="col-12 col-md-6">
-                <label class="form-label small">Límite visitas/día</label>
+              <div class="col-6">
+                <label class="form-label small">Límite/día</label>
                 <select id="limit" class="form-select form-select-sm">
-                  <option value="">Sin límite</option>
-                  <option>6</option>
-                  <option selected>8</option>
-                  <option>10</option>
-                  <option>12</option>
-                  <option>15</option>
+                  <option value="">Sin límite</option><option>6</option><option selected>8</option><option>10</option><option>12</option>
                 </select>
               </div>
               <div class="col-12">
                 <div class="form-check">
-                  <input class="form-check-input" type="checkbox" value="" id="chkSaturday">
-                  <label class="form-check-label small" for="chkSaturday">Incluir sábado opcional</label>
+                  <input class="form-check-input" type="checkbox" id="chkSaturday">
+                  <label class="form-check-label small" for="chkSaturday">Incluir sábado</label>
                 </div>
               </div>
               <div class="col-12">
                 <button id="btnProcess" class="btn btn-success w-100">Procesar y asignar</button>
               </div>
             </div>
-
             <hr>
-            <div class="section-title mb-2">Filtros</div>
             <div class="row g-2">
-              <div class="col-12">
-                <input id="txtSearch" class="form-control form-control-sm" placeholder="Buscar cliente..." />
-              </div>
-              <div class="col-12 col-md-6">
-                <select id="filterVendedor" class="form-select form-select-sm">
-                  <option value="">(Todos los vendedores)</option>
-                </select>
-              </div>
-              <div class="col-12 col-md-6">
-                <select id="filterEmpresa" class="form-select form-select-sm">
-                  <option value="">(Todas las empresas)</option>
-                </select>
-              </div>
-              <div class="col-12">
-                <select id="filterProvincia" class="form-select form-select-sm">
-                  <option value="">(Todas las provincias)</option>
-                </select>
-              </div>
-              <div class="col-12">
-                <select id="filterSemana" class="form-select form-select-sm">
-                  <option value="">(Todas las semanas)</option>
-                  <option value="1">Semana 1</option>
-                  <option value="2">Semana 2</option>
-                  <option value="3">Semana 3</option>
-                  <option value="4">Semana 4</option>
-                </select>
-              </div>
-              <div class="col-12">
-                <select id="filterDia" class="form-select form-select-sm">
-                  <option value="">(Todos los días)</option>
-                  <option value="Lunes">Lunes</option>
-                  <option value="Martes">Martes</option>
-                  <option value="Miércoles">Miércoles</option>
-                  <option value="Jueves">Jueves</option>
-                  <option value="Viernes">Viernes</option>
-                  <option value="Sábado">Sábado</option>
-                </select>
-              </div>
+              <div class="col-12"><input id="txtSearch" class="form-control form-control-sm" placeholder="Buscar..."></div>
+              <div class="col-6"><select id="filterVendedor" class="form-select form-select-sm"><option value="">(Vendedores)</option></select></div>
+              <div class="col-6"><select id="filterEmpresa" class="form-select form-select-sm"><option value="">(Empresas)</option></select></div>
+              <div class="col-12"><select id="filterProvincia" class="form-select form-select-sm"><option value="">(Provincias)</option></select></div>
+              <div class="col-12"><select id="filterSemana" class="form-select form-select-sm"><option value="">(Semanas)</option><option>1</option><option>2</option><option>3</option><option>4</option></select></div>
+              <div class="col-12"><select id="filterDia" class="form-select form-select-sm"><option value="">(Días)</option><option>Lunes</option><option>Martes</option><option>Miércoles</option><option>Jueves</option><option>Viernes</option><option>Sábado</option></select></div>
             </div>
-
             <hr>
-            <div class="section-title mb-2">Clientes</div>
-            <div id="listContainer" class="client-list"></div>
-
-            <hr>
-            <div id="ayuda" class="small text-muted">
-              Publica tu Google Sheet en la web como <b>CSV</b> y pega el enlace. O sube un archivo <b>Excel/CSV</b>. Ajusta el mapeo → <b>Procesar</b>.
-            </div>
+            <div class="small text-muted">Tip: si el mapa no carga, esta versión cambia automáticamente de servidor de mapas.</div>
           </div>
         </div>
       </aside>
-
-      <!-- Sección Mapa + Plan -->
       <main class="col-12 col-lg-8">
-        <div id="mapa" class="card shadow-sm mb-3">
-          <div class="card-body p-2">
-            <div id="map"><div id="mapNote" class="text-center">Mapa inicializando…</div></div>
-          </div>
-        </div>
-        <div id="plan" class="card shadow-sm">
+        <div class="card shadow-sm mb-3"><div class="card-body p-2"><div id="map"><div id="mapNote">Mapa inicializando…</div></div></div></div>
+        <div class="card shadow-sm">
           <div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="section-title mb-0">Plan (vista actual)</div>
+              <div class="fw-bold">Plan (vista actual)</div>
               <span class="badge bg-secondary" id="badgeCount">0</span>
             </div>
             <div class="table-responsive">
               <table class="table table-sm align-middle" id="tblPlan">
                 <thead class="table-light sticky-th">
-                  <tr>
-                    <th>Provincia</th><th>Día</th><th>Semana</th><th>Vendedor</th>
-                    <th>Gestor</th><th>Empresa</th><th>Razón Social</th><th>Lat</th><th>Lon</th><th>Visitado</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
+                  <tr><th>Provincia</th><th>Día</th><th>Semana</th><th>Vendedor</th><th>Gestor</th><th>Empresa</th><th>Razón Social</th><th>Lat</th><th>Lon</th><th>Visitado</th></tr>
+                </thead><tbody></tbody>
               </table>
             </div>
           </div>
         </div>
-        <footer class="py-3 text-center">© Planificador de Ruta · RD</footer>
       </main>
     </div>
   </div>
 
-  <!-- Base libs: Bootstrap (CSS arriba). Leaflet & SheetJS con fallbacks -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script>
   async function loadScriptWithFallbacks(urls){
     for(const url of urls){
       try{
         await new Promise((res, rej)=>{
-          const s = document.createElement('script');
-          s.src = url; s.async = true; s.onload = ()=>res(); s.onerror = ()=>rej(new Error('fail '+url));
+          const s = document.createElement('script'); s.src=url; s.async=true;
+          s.onload=()=>res(); s.onerror=()=>rej();
           document.head.appendChild(s);
         });
         return true;
-      }catch(e){ /* try next */ }
-    }
-    return false;
+      }catch(e){}
+    } return false;
   }
-  async function loadCSS(url){
-    return new Promise((res, rej)=>{
-      const l = document.createElement('link');
-      l.rel='stylesheet'; l.href=url; l.onload=()=>res(); l.onerror=()=>rej();
-      document.head.appendChild(l);
-    });
-  }
-  </script>
-
-  <script>
-  // App State
-  const DAYS_BASE = ["Lunes","Martes","Miércoles","Jueves","Viernes"];
-  const EXPECTED = ["provincia","DIA","SEMANA","vendedor","gestor_servicio","cod_empresa","empresa","razon_social","latitud","longitud"];
-  const DEFAULTS = { DIA:"", SEMANA:"", gestor_servicio:"", empresa:"", cod_empresa:"" };
-
-  const $ = sel => document.querySelector(sel);
-  const $$ = sel => Array.from(document.querySelectorAll(sel));
-  const statusText = $("#statusText");
-  const listContainer = $("#listContainer");
-  const tblBody = $("#tblPlan tbody");
-  const badgeCount = $("#badgeCount");
-  const filterVendedor = $("#filterVendedor");
-  const filterEmpresa = $("#filterEmpresa");
-  const filterProvincia = $("#filterProvincia");
-  const filterSemana = $("#filterSemana");
-  const filterDia = $("#filterDia");
-  const txtSearch = $("#txtSearch");
-  const limitSel = $("#limit");
-  const modeSel = $("#mode");
-  const chkSaturday = $("#chkSaturday");
-  const mappingBox = $("#mappingBox");
-  const mappingGrid = $("#mappingGrid");
-  const btnApplyMapping = $("#btnApplyMapping");
-  const mapNote = $("#mapNote");
-  const sheetsUrl = $("#sheetsUrl");
-  const btnLoadSheets = $("#btnLoadSheets");
-
-  let RAW_ROWS = [];    // datos normalizados previo a plan
-  let PLAN_ROWS = [];   // datos con semana/día asignados
-  let HEADERS = [];     // encabezados detectados
-  let MAPPING = {};     // destino -> origen
-  let map=null, markersLayer=null, mapReady=false;
-
-  function toast(msg){ statusText.textContent = msg; }
-
-  const LS_KEY = "planificador_visitados";
-  function loadVisited(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)||"{}"); }catch(_){ return {}; } }
-  function saveVisited(obj){ localStorage.setItem(LS_KEY, JSON.stringify(obj)); }
-  function clientKey(r){ return (r.cod_empresa && String(r.cod_empresa).trim()) || (r.empresa && String(r.empresa).trim()) || r.razon_social; }
-
-  // --- Map ---
   async function ensureLeaflet(){
-    if(window.L && typeof L.map==="function") return true;
-    try{ await loadCSS("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"); }catch(e){}
-    const ok = await loadScriptWithFallbacks([
+    if(window.L && L.map) return true;
+    return await loadScriptWithFallbacks([
       "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
       "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js",
       "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
     ]);
-    return ok;
   }
+  </script>
+
+  <script>
+  const $ = s=>document.querySelector(s), $$ = s=>Array.from(document.querySelectorAll(s));
+  const statusText=$("#statusText"), tblBody=$("#tblPlan tbody"), badgeCount=$("#badgeCount");
+  const filterVendedor=$("#filterVendedor"), filterEmpresa=$("#filterEmpresa"), filterProvincia=$("#filterProvincia"), filterSemana=$("#filterSemana"), filterDia=$("#filterDia"), txtSearch=$("#txtSearch");
+  const mappingGrid=$("#mappingGrid"), mappingBox=$("#mappingBox");
+
+  const EXPECTED=["provincia","DIA","SEMANA","vendedor","gestor_servicio","cod_empresa","empresa","razon_social","latitud","longitud"];
+  const DEFAULTS={DIA:"",SEMANA:"",gestor_servicio:"",empresa:"",cod_empresa:""};
+  let RAW_ROWS=[], HEADERS=[], MAPPING={}, PLAN_ROWS=[];
+  let map=null, markers=null, mapReady=false, providerIndex=0;
+  const providers=[
+    {name:"OSM", url:'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'},
+    {name:"OSM HOT", url:'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png'},
+    {name:"Carto Light", url:'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'},
+    {name:"Carto Voyager", url:'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'},
+    {name:"Stadia", url:'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png'},
+    {name:"Esri Street", url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}'}
+  ];
+
+  function toast(m){ statusText.textContent=m; }
+  function parseCoord(v){ if(v==null||v==="") return NaN; let s=String(v).trim().replace(/[^0-9,\.\-]/g,''); if(s.includes('.')&&s.includes(',')) s=s.replace(/,/g,''); else s=s.replace(',', '.'); const n=parseFloat(s); return Number.isFinite(n)?n:NaN; }
+  function toNum(x){ const n=parseCoord(x); return Number.isFinite(n)?n:null; }
+  function escapeHTML(s){return String(s||"").replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+
   async function initMap(){
     const ok = await ensureLeaflet();
-    if(!ok){ mapNote.textContent = "No se pudo cargar Leaflet (revisar red/CDN)."; return; }
+    if(!ok){ $("#mapNote").textContent="No se pudo cargar Leaflet."; return; }
     if(map) return;
-    map = L.map('map',{zoomControl:true}).setView([18.7357,-70.1627], 8);
-
-    const providers = [
-      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-      'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png'
-    ];
-    let added = false;
-    for (const url of providers){
-      try{ L.tileLayer(url,{maxZoom:19, attribution:'&copy; OpenStreetMap'}).addTo(map); added = true; break; }catch(e){}
-    }
-    if(!added){ mapNote.textContent = "No se pudo cargar la capa base."; return; }
-
+    map=L.map('map').setView([18.7357,-70.1627],8);
+    markers=L.layerGroup().addTo(map);
+    attachProvider(providerIndex);
+    $("#map").innerHTML="";
+    setTimeout(()=> map.invalidateSize(true),150);
+  }
+  function attachProvider(idx){
+    if(map._tileLayer) map.removeLayer(map._tileLayer);
+    const prov = providers[idx%providers.length];
+    const tl = L.tileLayer(prov.url, {maxZoom:19, attribution:'&copy; OpenStreetMap & contributors'});
+    map._tileLayer=tl.addTo(map);
+    tl.on('tileerror', ()=>{ // cambia automáticamente si hay error de tiles
+      providerIndex++; attachProvider(providerIndex);
+      toast("Cambiando servidor de mapas a: "+providers[(providerIndex)%providers.length].name);
+    });
     const DefaultIcon = L.icon({
       iconUrl:'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png',
       iconRetinaUrl:'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -297,225 +181,139 @@
       iconSize:[25,41], iconAnchor:[12,41], popupAnchor:[1,-34], shadowSize:[41,41]
     });
     L.Marker.prototype.options.icon = DefaultIcon;
-
-    markersLayer = L.layerGroup().addTo(map);
-    mapReady = true;
-    $("#map").innerHTML = "";
-    setTimeout(()=> map.invalidateSize(true), 150);
-    window.addEventListener('resize', ()=> map && map.invalidateSize());
   }
-  function clearMap(){ if(mapReady && markersLayer) markersLayer.clearLayers(); }
   function renderPins(rows){
-    if(!mapReady) return;
-    clearMap();
+    if(!map) return;
+    markers.clearLayers();
     const bounds=[];
-    const visited = loadVisited();
     rows.forEach(r=>{
-      const lat = parseCoord(r.latitud);
-      const lon = parseCoord(r.longitud);
-      if(!Number.isFinite(lat) || !Number.isFinite(lon)) return;
-      const k = clientKey(r);
-      const isVisited = !!visited[k];
-      const m = L.marker([lat,lon], {opacity:isVisited?0.7:1}).addTo(markersLayer);
-      m.bindPopup(`<b>${escapeHTML(r.razon_social||"")}</b><br>${escapeHTML(r.empresa||"")} • ${escapeHTML(r.vendedor||"")}<br>S${r.SEMANA||""} • ${escapeHTML(r.DIA||"")}`);
+      const lat=parseCoord(r.latitud), lon=parseCoord(r.longitud);
+      if(!Number.isFinite(lat)||!Number.isFinite(lon)) return;
+      L.marker([lat,lon]).addTo(markers)
+       .bindPopup(`<b>${escapeHTML(r.razon_social||"")}</b><br>${escapeHTML(r.empresa||"")} • ${escapeHTML(r.vendedor||"")}<br>S${r.SEMANA||""} · ${escapeHTML(r.DIA||"")}`);
       bounds.push([lat,lon]);
     });
     if(bounds.length) map.fitBounds(bounds,{padding:[20,20]});
   }
 
-  // --- Utils ---
-  function escapeHTML(s){ return String(s||"").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
-  function groupBy(arr, key){ const m=new Map(); arr.forEach(it=>{ const k=it[key]; if(!m.has(k)) m.set(k,[]); m.get(k).push(it);}); return m; }
-  function uniqSorted(arr){ return Array.from(new Set(arr.filter(Boolean))).sort((a,b)=> String(a).localeCompare(String(b),'es',{numeric:true})); }
-
-  function parseCoord(val){
-    if(val==null || val==="") return NaN;
-    let s = String(val).trim();
-    s = s.replace(/[^0-9,\.\-]/g,'');
-    if(s.includes('.') && s.includes(',')) s = s.replace(/,/g,''); else s = s.replace(',', '.');
-    const n = parseFloat(s);
-    return Number.isFinite(n)? n : NaN;
+  function uniqSorted(a){ return [...new Set(a.filter(Boolean))].sort((x,y)=> String(x).localeCompare(String(y),'es',{numeric:true})); }
+  function updateFilters(rows){
+    filterVendedor.innerHTML='<option value="">(Vendedores)</option>'+uniqSorted(rows.map(r=>r.vendedor)).map(v=>`<option>${escapeHTML(v)}</option>`).join('');
+    filterEmpresa.innerHTML='<option value="">(Empresas)</option>'+uniqSorted(rows.map(r=>r.empresa||r.cod_empresa)).map(v=>`<option>${escapeHTML(v)}</option>`).join('');
+    filterProvincia.innerHTML='<option value="">(Provincias)</option>'+uniqSorted(rows.map(r=>r.provincia)).map(v=>`<option>${escapeHTML(v)}</option>`).join('');
   }
-  function toNum(x){
-    if(x===null||x===undefined||x==="") return null;
-    const n = parseCoord(x);
-    return Number.isFinite(n)? n : null;
+  function renderTable(rows){
+    tblBody.innerHTML = rows.map(r=>`<tr>
+      <td>${escapeHTML(r.provincia||"")}</td><td>${escapeHTML(r.DIA||"")}</td><td>${escapeHTML(r.SEMANA||"")}</td>
+      <td>${escapeHTML(r.vendedor||"")}</td><td>${escapeHTML(r.gestor_servicio||"")}</td>
+      <td>${escapeHTML(r.empresa||r.cod_empresa||"")}</td><td>${escapeHTML(r.razon_social||"")}</td>
+      <td>${r.latitud?Number(parseCoord(r.latitud)).toFixed(6):""}</td><td>${r.longitud?Number(parseCoord(r.longitud)).toFixed(6):""}</td>
+      <td></td></tr>`).join('');
+    badgeCount.textContent = rows.length;
+  }
+  function currentFiltered(){
+    const s=txtSearch.value.trim().toLowerCase(), v=filterVendedor.value, e=filterEmpresa.value, p=filterProvincia.value, w=filterSemana.value, d=filterDia.value;
+    return PLAN_ROWS.filter(r=>{
+      if(v && r.vendedor!==v) return false;
+      if(e && (r.empresa||r.cod_empresa)!==e) return false;
+      if(p && r.provincia!==p) return false;
+      if(w && String(r.SEMANA)!==String(w)) return false;
+      if(d && r.DIA!==d) return false;
+      if(s && ![r.razon_social,r.empresa,r.cod_empresa,r.vendedor,r.provincia].some(x=> String(x||"").toLowerCase().includes(s))) return false;
+      return true;
+    });
   }
 
-  const ALIASES = {
-    "provincia":["provincia","estado","region"],
-    "dia":["dia","diavisita","weekday"],
-    "semana":["semana","nsemana","sem"],
-    "vendedor":["vendedor","seller","rep","asesor","agente","comercial"],
-    "gestor_servicio":["gestor_servicio","gestor","supervisor","coordinador","manager"],
-    "cod_empresa":["cod empresa","codempresa","codigoempresa","id","codigo","cod_empresa","Cod Empresa","Cod_Empresa"],
-    "empresa":["empresa","compania","compañia","Empresa"],
-    "razon_social":["razonsocial","cliente","negocio","nombrecliente","razon_social","RazonSocial"],
-    "latitud":["latitud","lat","latitude","Latitud"],
-    "longitud":["longitud","lon","lng","long","longitude","Longitud"]
-  };
+  // Mapping
+  const ALIASES={provincia:["provincia","estado"], DIA:["dia","weekday"], SEMANA:["semana","sem"], vendedor:["vendedor","rep","asesor","agente"], gestor_servicio:["gestor","gestor_servicio"], cod_empresa:["cod empresa","cod_empresa","id","codigo"], empresa:["empresa","compania"], razon_social:["razonsocial","cliente","negocio"], latitud:["latitud","lat"], longitud:["longitud","lon","lng","long"]};
   function norm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,""); }
-
-  // Mapping UI
   function autoMapping(headers){
-    const nh = headers.map(h=>({raw:h, n:norm(h)}));
-    const map = {};
-    for(const t of EXPECTED){
-      let found = nh.find(h=>h.n===norm(t));
-      if(!found){
-        const als = ALIASES[norm(t)] || [];
-        found = nh.find(h=> als.some(a=>h.n===norm(a)));
-      }
-      if(!found && t==="cod_empresa"){
-        found = nh.find(h=> h.n==="empresa" || h.n==="id" || h.raw==='Cod Empresa' || h.raw==='Cod_Empresa');
-      }
-      map[t] = found? found.raw : "(no usar)";
-    }
+    const nh=headers.map(h=>({raw:h, n:norm(h)})); const map={};
+    EXPECTED.forEach(t=>{
+      let hit=nh.find(h=>h.n===norm(t));
+      if(!hit){ const als=ALIASES[t]||[]; hit=nh.find(h=> als.some(a=>h.n===norm(a))); }
+      if(!hit && t==="cod_empresa"){ hit=nh.find(h=> h.n==="empresa"||h.n==="id"); }
+      map[t]=hit? hit.raw : "(no usar)";
+    });
     return map;
   }
   function buildMappingUI(headers){
-    mappingGrid.innerHTML = "";
-    const opts = ['(no usar)'].concat(headers);
-    const current = autoMapping(headers);
-    MAPPING = {...current};
-    EXPECTED.forEach(target=>{
-      const col = document.createElement('div');
-      col.className = "col-12 col-md-6";
-      col.innerHTML = `
-        <label class="form-label">${target}</label>
-        <select class="form-select form-select-sm" data-target="${target}">
-          ${opts.map(h=>`<option ${current[target]===h?"selected":""}>${h}</option>`).join("")}
+    mappingGrid.innerHTML="";
+    const opts=['(no usar)'].concat(headers);
+    MAPPING=autoMapping(headers);
+    EXPECTED.forEach(t=>{
+      const d=document.createElement('div'); d.className="col-12 col-md-6";
+      d.innerHTML=`<label class="form-label">${t}</label>
+        <select class="form-select form-select-sm" data-target="${t}">
+          ${opts.map(h=>`<option ${MAPPING[t]===h?"selected":""}>${h}</option>`).join("")}
         </select>`;
-      mappingGrid.appendChild(col);
+      mappingGrid.appendChild(d);
     });
     mappingBox.classList.remove("d-none");
   }
+  function normalizeFromMapping(){
+    if(!HEADERS.length||!RAW_ROWS.length){ toast("Carga datos y aplica mapeo."); return []; }
+    return RAW_ROWS.map(row=>{
+      const out={}; EXPECTED.forEach(t=>{ const src=MAPPING[t]; out[t]= src && src!=="(no usar)" ? row[src] : (DEFAULTS[t]||""); });
+      out.latitud=toNum(out.latitud); out.longitud=toNum(out.longitud);
+      return out;
+    });
+  }
 
-  // CSV & Excel loaders
+  // Loaders
   function parseCSV(text){
-    // Simple CSV parser (handles quotes and commas)
-    const rows=[]; let cur=[], field="", inQuotes=false;
-    for(let i=0;i<text.length;i++){
-      const c=text[i], n=text[i+1];
-      if(inQuotes){
-        if(c==='"' && n==='"'){ field+='"'; i++; }
-        else if(c==='"'){ inQuotes=false; }
-        else field+=c;
-      }else{
-        if(c===','){ cur.push(field); field=""; }
-        else if(c==='\n' || c==='\r'){ if(c==='\r' && n==='\n') i++; cur.push(field); field=""; rows.push(cur); cur=[]; }
-        else if(c==='"'){ inQuotes=true; }
-        else field+=c;
-      }
+    const rows=[]; let cur=[], field="", inQ=false;
+    for(let i=0;i<text.length;i++){ const c=text[i], n=text[i+1];
+      if(inQ){ if(c=='"' && n=='"'){ field+='"'; i++; } else if(c=='"'){ inQ=false; } else field+=c; }
+      else { if(c==','){ cur.push(field); field=""; } else if(c=='\n' || c=='\r'){ if(c=='\r' && n=='\n') i++; cur.push(field); field=""; rows.push(cur); cur=[]; } else if(c=='"'){ inQ=true; } else field+=c; }
     }
     if(field.length>0 || cur.length>0){ cur.push(field); rows.push(cur); }
     return rows;
   }
-
   async function loadFromSheets(url){
+    await initMap();
     toast("Cargando Google Sheets...");
-    const resp = await fetch(url, {cache:'no-store'});
-    const text = await resp.text();
-    const matrix = parseCSV(text);
-    HEADERS = matrix[0];
-    const records = matrix.slice(1).filter(r=> r.some(x=> String(x).trim()!==""));
-    RAW_ROWS = records.map(r=>{
-      const o={}; HEADERS.forEach((h,i)=> o[h]=r[i]); return o;
-    });
-    buildMappingUI(HEADERS);
-    toast(`Hoja cargada: ${records.length} filas.`);
+    const resp = await fetch(url, {cache:'no-store'}); const text = await resp.text();
+    const matrix=parseCSV(text); HEADERS=matrix[0]; const records=matrix.slice(1).filter(r=> r.some(x=> String(x).trim()!==""));
+    RAW_ROWS = records.map(r=>{ const o={}; HEADERS.forEach((h,i)=> o[h]=r[i]); return o; });
+    buildMappingUI(HEADERS); toast(`Hoja cargada: ${records.length} filas.`);
   }
-
   async function loadLocalFile(file){
-    const name = file.name.toLowerCase();
+    await initMap();
+    const name=file.name.toLowerCase();
     if(name.endsWith(".csv")){
-      const text = await file.text();
-      const matrix = parseCSV(text);
-      HEADERS = matrix[0];
-      const records = matrix.slice(1).filter(r=> r.some(x=> String(x).trim()!==""));
-      RAW_ROWS = records.map(r=>{ const o={}; HEADERS.forEach((h,i)=> o[h]=r[i]); return o; });
-      buildMappingUI(HEADERS);
-      toast(`CSV cargado: ${records.length} filas.`);
-      return;
+      const text=await file.text(); const matrix=parseCSV(text); HEADERS=matrix[0];
+      const records=matrix.slice(1).filter(r=> r.some(x=> String(x).trim()!==""));
+      RAW_ROWS=records.map(r=>{ const o={}; HEADERS.forEach((h,i)=> o[h]=r[i]); return o; });
+      buildMappingUI(HEADERS); toast(`CSV cargado: ${records.length} filas.`); return;
     }
-    // Excel via SheetJS
     if(!(window.XLSX && XLSX.read)){
-      toast("Cargando librería Excel…");
       const ok = await loadScriptWithFallbacks([
         "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
         "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
         "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"
       ]);
-      if(!ok){ toast("No se pudo cargar SheetJS (red bloqueada)."); return; }
+      if(!ok){ toast("No se pudo cargar SheetJS."); return; }
     }
-    const data = await file.arrayBuffer();
-    const wb = XLSX.read(data, {type:"array"});
-    const wsname = wb.SheetNames[0];
-    const ws = wb.Sheets[wsname];
-    const matrix = XLSX.utils.sheet_to_json(ws, {header:1, defval:""});
-    HEADERS = matrix[0].map(String);
-    const records = matrix.slice(1).filter(r=> r.some(x=> String(x).trim()!==""));
-    RAW_ROWS = records.map(r=>{ const o={}; HEADERS.forEach((h,i)=> o[h]=r[i]); return o; });
-    buildMappingUI(HEADERS);
-    toast(`Excel cargado: ${records.length} filas (hoja: ${wsname}).`);
+    const data=await file.arrayBuffer();
+    const wb=XLSX.read(data,{type:"array"}); const wsname=wb.SheetNames[0]; const ws=wb.Sheets[wsname];
+    const matrix=XLSX.utils.sheet_to_json(ws,{header:1,defval:""}); HEADERS=matrix[0].map(String);
+    const records=matrix.slice(1).filter(r=> r.some(x=> String(x).trim()!==""));
+    RAW_ROWS=records.map(r=>{ const o={}; HEADERS.forEach((h,i)=> o[h]=r[i]); return o; });
+    buildMappingUI(HEADERS); toast(`Excel cargado: ${records.length} filas (${wsname}).`);
   }
 
-  btnLoadSheets.addEventListener('click', async ()=>{
-    if(!sheetsUrl.value.trim()){ toast("Pega la URL de Google Sheets (CSV)."); return; }
-    await loadFromSheets(sheetsUrl.value.trim());
-  });
-  document.getElementById("fileInput").addEventListener("change", async (ev)=>{
-    const file = ev.target.files[0]; if(!file) return;
-    await loadLocalFile(file);
-  });
-
-  // Build normalized rows from mapping
-  function normalizeFromMapping(){
-    if(!HEADERS.length || !RAW_ROWS.length){ toast("Carga datos y aplica mapeo."); return []; }
-    const mapped = RAW_ROWS.map(row=>{
-      const obj={};
-      EXPECTED.forEach(t=>{
-        const src = MAPPING[t];
-        obj[t] = src && src!=="(no usar)" ? row[src] : (DEFAULTS[t]??"");
-      });
-      obj.latitud = toNum(obj.latitud);
-      obj.longitud = toNum(obj.longitud);
-      return obj;
-    });
-    return mapped;
-  }
-
-  btnApplyMapping.addEventListener("click", ()=>{
-    $$('[data-target]').forEach(s=> MAPPING[s.dataset.target] = s.value);
-    toast("Mapeo aplicado.");
-  });
-
-  // Plan
-  function euclid(a,b){const dx=a[0]-b[0],dy=a[1]-b[1];return Math.hypot(dx,dy)}
-  function mean(points){const s=[0,0];for(const p of points){s[0]+=p[0];s[1]+=p[1];}return [s[0]/points.length,s[1]/points.length]}
+  // Assign
   function kmeans(points,k,maxIter=80){
+    function euclid(a,b){const dx=a[0]-b[0],dy=a[1]-b[1];return Math.hypot(dx,dy)}
+    function mean(ps){const s=[0,0];for(const p of ps){s[0]+=p[0];s[1]+=p[1];}return [s[0]/ps.length,s[1]/ps.length]}
     if(points.length===0) return {labels:[],centers:[]};
-    if(k<=1 || points.length<=k){
-      const labels = points.map((_,i)=> i%k);
-      const centers = Array.from({length:k},(_,i)=> mean(points.filter((_,j)=> labels[j]===i)));
-      return {labels,centers};
-    }
+    if(k<=1 || points.length<=k){ const labels=points.map((_,i)=> i%k); const centers=Array.from({length:k},(_,i)=> mean(points.filter((_,j)=> labels[j]===i))); return {labels,centers}; }
     const centers=[]; centers.push(points[Math.floor(Math.random()*points.length)]);
-    while(centers.length<k){
-      const d=points.map(p=> Math.min(...centers.map(c=> euclid(p,c))));
-      const sum = d.reduce((a,b)=>a+b,0)||1;
-      let r=Math.random()*sum, idx=0;
-      for(let i=0;i<d.length;i++){ r-=d[i]; if(r<=0){ idx=i; break; } }
-      centers.push(points[idx]);
-    }
+    while(centers.length<k){ const d=points.map(p=> Math.min(...centers.map(c=> euclid(p,c)))); const sum=d.reduce((a,b)=>a+b,0)||1; let r=Math.random()*sum, idx=0; for(let i=0;i<d.length;i++){ r-=d[i]; if(r<=0){ idx=i; break; } } centers.push(points[idx]); }
     let labels=new Array(points.length).fill(0);
-    for(let it=0; it<maxIter; it++){
-      let changed=false;
-      for(let i=0;i<points.length;i++){
-        let best=0,bd=Infinity;
-        for(let c=0;c<centers.length;c++){ const dd=euclid(points[i],centers[c]); if(dd<bd){bd=dd;best=c;} }
-        if(labels[i]!==best){ labels[i]=best; changed=true; }
-      }
+    for(let it=0; it<maxIter; it++){ let changed=false;
+      for(let i=0;i<points.length;i++){ let best=0,bd=Infinity; for(let c=0;c<centers.length;c++){ const dd=euclid(points[i],centers[c]); if(dd<bd){bd=dd;best=c;} } if(labels[i]!==best){ labels[i]=best; changed=true; } }
       const groups=Array.from({length:k},()=>[]);
       for(let i=0;i<points.length;i++) groups[labels[i]].push(points[i]);
       for(let c=0;c<k;c++){ if(groups[c].length>0) centers[c]=mean(groups[c]); }
@@ -526,259 +324,87 @@
   function balanceWeeks(rows){
     const n=rows.length; const target=Array.from({length:4},(_,i)=>Math.floor(n/4)+(i<(n%4)?1:0)); const counts=[0,0,0,0];
     rows.forEach(r=> counts[r.SEMANA-1]++);
-    for(let pass=0;pass<6;pass++){
-      let moved=false;
-      for(let f=0; f<4; f++){
-        for(let t=0; t<4; t++){
-          if(counts[f]>target[f] && counts[t]<target[t]){
-            const idx = rows.findIndex(r=> r.SEMANA===f+1);
-            if(idx>=0){ rows[idx].SEMANA=t+1; counts[f]--; counts[t]++; moved=true; }
-          }
-        }
-      }
+    for(let pass=0;pass<6;pass++){ let moved=false;
+      for(let f=0; f<4; f++){ for(let t=0; t<4; t++){ if(counts[f]>target[f] && counts[t]<target[t]){
+        const idx=rows.findIndex(r=> r.SEMANA===f+1); if(idx>=0){ rows[idx].SEMANA=t+1; counts[f]--; counts[t]++; moved=true; } } } }
       if(!moved) break;
     }
   }
   function assignPlan(data, mode="balance", perDayLimit="", includeSaturday=false){
-    const valid = data.map(r=> ({...r, latitud:toNum(r.latitud), longitud:toNum(r.longitud)}))
-                      .filter(r=> r.latitud!=null && r.longitud!=null && r.vendedor);
-    const byVend = groupBy(valid, "vendedor");
-    const plan = [];
-    const DAYS = includeSaturday ? [...DAYS_BASE, "Sábado"] : DAYS_BASE.slice();
-
+    const DAYS = includeSaturday? ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"] : ["Lunes","Martes","Miércoles","Jueves","Viernes"];
+    const valid=data.map(r=> ({...r, latitud:toNum(r.latitud), longitud:toNum(r.longitud)})).filter(r=> r.latitud!=null && r.longitud!=null && r.vendedor);
+    const byVend=new Map(); valid.forEach(r=>{ const k=r.vendedor; if(!byVend.has(k)) byVend.set(k,[]); byVend.get(k).push(r); });
+    const plan=[];
     for(const [vend, items] of byVend){
-      const pts = items.map(r=> [Number(r.latitud), Number(r.longitud)]);
-      let weekLabels;
-      if(items.length>=4){ weekLabels = kmeans(pts,4).labels; } else { weekLabels = items.map((_,i)=> i%4); }
-      items.forEach((r,i)=> r.SEMANA = (weekLabels[i]%4) + 1);
+      const pts=items.map(r=>[Number(r.latitud),Number(r.longitud)]);
+      const wl = (items.length>=4)? kmeans(pts,4).labels : items.map((_,i)=> i%4);
+      items.forEach((r,i)=> r.SEMANA = (wl[i]%4)+1);
       if(mode==="balance") balanceWeeks(items);
-
-      const byWeek = groupBy(items, "SEMANA");
-      for(const [week, rows] of byWeek){
-        const p = rows.map(r=> [Number(r.latitud), Number(r.longitud)]);
-        const k = Math.min(DAYS.length, Math.max(1, rows.length));
-        const dlabels = (rows.length>=2)? kmeans(p,k).labels : rows.map(_=>0);
-
+      const byWeek=new Map(); items.forEach(r=>{ const k=r.SEMANA; if(!byWeek.has(k)) byWeek.set(k,[]); byWeek.get(k).push(r); });
+      for(const [w,rows] of byWeek){
+        const p=rows.map(r=>[Number(r.latitud),Number(r.longitud)]);
+        const k=Math.min(DAYS.length, Math.max(1, rows.length));
+        const dl = (rows.length>=2)? kmeans(p,k).labels : rows.map(_=>0);
         const meta={};
-        for(let i=0;i<rows.length;i++){
-          const lab = dlabels[i];
-          if(!meta[lab]) meta[lab]={lat:0,lon:0,c:0};
-          meta[lab].lat += rows[i].latitud;
-          meta[lab].lon += rows[i].longitud;
-          meta[lab].c++;
-        }
+        for(let i=0;i<rows.length;i++){ const lab=dl[i]; if(!meta[lab]) meta[lab]={lat:0,lon:0,c:0}; meta[lab].lat+=rows[i].latitud; meta[lab].lon+=rows[i].longitud; meta[lab].c++; }
         const ordered = Object.keys(meta).map(Number).sort((a,b)=>{
-          const A=meta[a], B=meta[b];
-          if((A.lat/A.c)!==(B.lat/B.c)) return (B.lat/B.c)-(A.lat/A.c);
-          return (A.lon/A.c)-(B.lon/B.c);
+          const A=meta[a],B=meta[b]; if((A.lat/A.c)!==(B.lat/B.c)) return (B.lat/B.c)-(A.lat/A.c); return (A.lon/A.c)-(B.lon/B.c);
         });
-        const mapDay = new Map();
-        ordered.forEach((lab,idx)=> mapDay.set(lab, DAYS[idx % DAYS.length]));
-
-        rows.forEach((r,i)=> r.DIA = mapDay.get(dlabels[i]));
-
-        const limit = perDayLimit? Number(perDayLimit) : null;
-        if(limit){
-          const byDay = groupBy(rows, "DIA");
-          const order = DAYS.slice(0, k);
-          for(let pass=0; pass<6; pass++){
-            let moved=false;
-            for(const d of order){
-              const list = byDay.get(d)||[];
-              if(list.length>limit){
-                const extra = list.splice(limit);
-                for(const dd of order){
-                  const dest = byDay.get(dd)||[];
-                  while(extra.length && dest.length<limit){
-                    const it = extra.shift(); it.DIA = dd; dest.push(it); moved=true;
-                  }
-                  byDay.set(dd,dest);
-                  if(!extra.length) break;
-                }
-                while(extra.length){
-                  const dd = order[Math.floor(Math.random()*order.length)];
-                  const dest = byDay.get(dd)||[];
-                  const it = extra.shift(); it.DIA = dd; dest.push(it); byDay.set(dd,dest); moved=true;
-                }
+        const mapDay=new Map(); ordered.forEach((lab,idx)=> mapDay.set(lab, DAYS[idx%DAYS.length]));
+        rows.forEach((r,i)=> r.DIA = mapDay.get(dl[i]));
+        const limit = perDayLimit? Number(perDayLimit): null;
+        if(limit){ const byDay=new Map(); rows.forEach(r=>{ const k=r.DIA; if(!byDay.has(k)) byDay.set(k,[]); byDay.get(k).push(r); });
+          const order=DAYS.slice(0,k);
+          for(let pass=0; pass<6; pass++){ let moved=false;
+            for(const d of order){ const list=byDay.get(d)||[];
+              if(list.length>limit){ const extra=list.splice(limit);
+                for(const dd of order){ const dest=byDay.get(dd)||[]; while(extra.length && dest.length<limit){ const it=extra.shift(); it.DIA=dd; dest.push(it); moved=true; } byDay.set(dd,dest); if(!extra.length) break; }
+                while(extra.length){ const dd=order[Math.floor(Math.random()*order.length)]; const dest=byDay.get(dd)||[]; const it=extra.shift(); it.DIA=dd; dest.push(it); byDay.set(dd,dest); moved=true; }
               }
             }
             if(!moved) break;
           }
         }
-
-        rows.forEach(r=>{
-          plan.push({
-            provincia: r.provincia??"",
-            DIA: r.DIA??"",
-            SEMANA: r.SEMANA??"",
-            vendedor: r.vendedor??"",
-            gestor_servicio: r.gestor_servicio??"",
-            cod_empresa: r.cod_empresa??"",
-            empresa: r.empresa??"",
-            razon_social: r.razon_social??"",
-            latitud: r.latitud??"",
-            longitud: r.longitud??""
-          });
-        });
+        rows.forEach(r=> plan.push({...r}));
       }
     }
-    return plan.sort((a,b)=> (a.SEMANA-b.SEMANA) ||
-      DAYS.indexOf(a.DIA)-DAYS.indexOf(b.DIA) ||
-      String(a.vendedor||"").localeCompare(String(b.vendedor||""),'es') ||
-      String(a.razon_social||"").localeCompare(String(b.razon_social||""),'es'));
+    return plan.sort((a,b)=> (a.SEMANA-b.SEMANA) || DAYS.indexOf(a.DIA)-DAYS.indexOf(b.DIA) || String(a.vendedor||"").localeCompare(String(b.vendedor||""),'es') || String(a.razon_social||"").localeCompare(String(b.razon_social||""),'es'));
   }
 
-  // Filters + list/table
-  function updateFilters(rows){
-    filterVendedor.innerHTML = '<option value="">(Todos los vendedores)</option>' + uniqSorted(rows.map(r=> r.vendedor)).map(v=> `<option>${escapeHTML(v)}</option>`).join("");
-    filterEmpresa.innerHTML = '<option value="">(Todas las empresas)</option>' + uniqSorted(rows.map(r=> r.empresa||r.cod_empresa)).map(v=> `<option>${escapeHTML(v)}</option>`).join("");
-    filterProvincia.innerHTML = '<option value="">(Todas las provincias)</option>' + uniqSorted(rows.map(r=> r.provincia)).map(v=> `<option>${escapeHTML(v)}</option>`).join("");
-  }
-  function renderList(rows){
-    const visited = loadVisited();
-    listContainer.innerHTML = rows.map(r=>{
-      const k = clientKey(r);
-      const isVisited = !!visited[k];
-      return `
-        <div class="client-item">
-          <input class="form-check-input" type="checkbox" data-act="vis" data-key="${escapeHTML(k)}" ${isVisited?"checked":""}>
-          <div class="flex-fill">
-            <div class="client-name">${escapeHTML(r.razon_social||"")}</div>
-            <div class="small text-muted">${escapeHTML(r.vendedor||"")} · ${escapeHTML(r.empresa||"")} · S${r.SEMANA||""}/${r.DIA||""}</div>
-          </div>
-          <button class="btn btn-sm btn-outline-secondary" data-act="go" data-lat="${r.latitud}" data-lon="${r.longitud}">Ir</button>
-        </div>`;
-    }).join("");
-
-    $$("#listContainer [data-act='go']").forEach(btn=>{
-      btn.addEventListener("click", ()=>{
-        const lat = parseCoord(btn.dataset.lat), lon = parseCoord(btn.dataset.lon);
-        if(Number.isFinite(lat) && Number.isFinite(lon) && mapReady){
-          map.setView([lat,lon], 15);
-        }
-      });
-    });
-    $$("#listContainer [data-act='vis']").forEach(chk=>{
-      chk.addEventListener("change", ()=>{
-        const st = loadVisited();
-        const key = chk.dataset.key;
-        if(chk.checked) st[key]=true; else delete st[key];
-        saveVisited(st);
-        renderTable(currentFiltered());
-        renderPins(currentFiltered());
-      });
-    });
-  }
-  function renderTable(rows){
-    const visited = loadVisited();
-    tblBody.innerHTML = rows.map(r=>{
-      const k = clientKey(r);
-      const isVisited = !!visited[k];
-      const trClass = isVisited? " class='visited-row' " : "";
-      return `<tr ${trClass}>
-        <td>${escapeHTML(r.provincia||"")}</td>
-        <td>${escapeHTML(r.DIA||"")}</td>
-        <td>${escapeHTML(r.SEMANA||"")}</td>
-        <td>${escapeHTML(r.vendedor||"")}</td>
-        <td>${escapeHTML(r.gestor_servicio||"")}</td>
-        <td>${escapeHTML(r.empresa||r.cod_empresa||"")}</td>
-        <td>${escapeHTML(r.razon_social||"")}</td>
-        <td>${r.latitud!=null && r.latitud!==""? Number(parseCoord(r.latitud)).toFixed(6):""}</td>
-        <td>${r.longitud!=null && r.longitud!==""? Number(parseCoord(r.longitud)).toFixed(6):""}</td>
-        <td><input type="checkbox" data-act="vis-table" data-key="${escapeHTML(k)}" ${isVisited?"checked":""}></td>
-      </tr>`;
-    }).join("");
-    badgeCount.textContent = rows.length;
-
-    $$("#tblPlan [data-act='vis-table']").forEach(chk=>{
-      chk.addEventListener("change", ()=>{
-        const st = loadVisited();
-        const key = chk.dataset.key;
-        if(chk.checked) st[key]=true; else delete st[key];
-        saveVisited(st);
-        renderList(currentFiltered());
-        renderPins(currentFiltered());
-        renderTable(currentFiltered());
-      });
-    });
-  }
-  function currentFiltered(){
-    const s = txtSearch.value.trim().toLowerCase();
-    const v = filterVendedor.value;
-    const e = filterEmpresa.value;
-    const p = filterProvincia.value;
-    const w = filterSemana.value;
-    const d = filterDia.value;
-    return PLAN_ROWS.filter(r=>{
-      if(v && r.vendedor!==v) return false;
-      if(e && (r.empresa||r.cod_empresa)!==e) return false;
-      if(p && r.provincia!==p) return false;
-      if(w && String(r.SEMANA)!==String(w)) return false;
-      if(d && r.DIA!==d) return false;
-      if(s){
-        const hay = [r.razon_social, r.empresa, r.cod_empresa, r.vendedor, r.provincia].some(x=> String(x||"").toLowerCase().includes(s));
-        if(!hay) return false;
-      }
-      return true;
-    });
-  }
-  function refreshAll(){
-    if(PLAN_ROWS.length){
-      updateFilters(PLAN_ROWS);
-      const rows = currentFiltered();
-      renderList(rows);
-      renderTable(rows);
-      renderPins(rows);
-    }
-  }
-
-  // Buttons
-  $("#btnProcess").addEventListener("click", async ()=>{
-    await initMap();
-    const base = normalizeFromMapping();
-    if(!base.length){ toast("Primero carga datos y aplica el mapeo."); return; }
-    PLAN_ROWS = assignPlan(base, modeSel.value, limitSel.value, chkSaturday.checked);
-    refreshAll();
-    toast(`Plan generado: ${PLAN_ROWS.length} filas.`);
+  // Actions
+  document.getElementById("btnLoadSheets").onclick = ()=>{
+    const url = document.getElementById("sheetsUrl").value.trim();
+    if(!url) return toast("Pega URL CSV de Google Sheets."); loadFromSheets(url);
+  };
+  document.getElementById("fileInput").addEventListener("change", async ev=>{
+    const f=ev.target.files[0]; if(!f) return; await loadLocalFile(f);
   });
+  document.getElementById("btnApplyMapping").onclick = ()=>{
+    $$("[data-target]").forEach(s=> MAPPING[s.dataset.target]=s.value); toast("Mapeo aplicado.");
+  };
+  document.getElementById("btnExportCSV").onclick = ()=>{
+    const rows=currentFiltered(); if(!rows.length) return toast("No hay datos.");
+    const headers=["provincia","DIA","SEMANA","vendedor","gestor_servicio","empresa","cod_empresa","razon_social","latitud","longitud"];
+    const csv=[headers.join(",")].concat(rows.map(r=> headers.map(h=>{const v=r[h]; if(v==null) return ""; const s=String(v).replace(/"/g,'""'); return /["\n,]/.test(s)?'"'+s+'"':s;}).join(","))).join("\n");
+    const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="Plan_Rutas_Filtrado.csv"; a.click(); URL.revokeObjectURL(url);
+  };
+  document.getElementById("btnClear").onclick = ()=>{
+    RAW_ROWS=[]; HEADERS=[]; MAPPING={}; PLAN_ROWS=[];
+    mappingGrid.innerHTML=""; mappingBox.classList.add("d-none"); tblBody.innerHTML=""; badgeCount.textContent="0";
+    if(markers) markers.clearLayers(); toast("Listo.");
+  };
 
-  $("#btnExportCSV").addEventListener("click", ()=>{
-    const rows = currentFiltered();
-    if(!rows.length){ toast("No hay datos para exportar."); return; }
-    const headers = ["provincia","DIA","SEMANA","vendedor","gestor_servicio","empresa","cod_empresa","razon_social","latitud","longitud"];
-    const csv = [headers.join(",")].concat(rows.map(r=> headers.map(h=> csvCell(r[h])).join(","))).join("\n");
-    const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "Plan_Rutas_Filtrado.csv"; a.click();
-    URL.revokeObjectURL(url);
-  });
-  function csvCell(v){ if(v==null) return ""; const s = String(v).replace(/"/g,'""'); if(/["\n,]/.test(s)) return '"' + s + '"'; return s; }
+  [filterVendedor, filterEmpresa, filterProvincia, filterSemana, filterDia].forEach(el=> el.addEventListener("change", ()=>{
+    const rows=currentFiltered(); renderTable(rows); renderPins(rows);
+  }));
+  txtSearch.addEventListener("input", ()=>{ const rows=currentFiltered(); renderTable(rows); renderPins(rows); });
 
-  $("#btnClear").addEventListener("click", ()=>{
-    RAW_ROWS=[]; PLAN_ROWS=[]; HEADERS=[]; MAPPING={};
-    listContainer.innerHTML=""; tblBody.innerHTML=""; badgeCount.textContent="0";
-    mappingGrid.innerHTML=""; mappingBox.classList.add("d-none");
-    if(mapReady && markersLayer) markersLayer.clearLayers();
-    toast("Listo.");
-  });
+  document.getElementById("btnProcess").onclick = ()=>{
+    const base = normalizeFromMapping(); if(!base.length) return toast("Carga datos y aplica mapeo.");
+    PLAN_ROWS = assignPlan(base, document.getElementById("mode").value, document.getElementById("limit").value, document.getElementById("chkSaturday").checked);
+    updateFilters(PLAN_ROWS); const rows=currentFiltered(); renderTable(rows); renderPins(rows); toast(`Plan generado: ${PLAN_ROWS.length} filas.`);
+  };
 
-  [filterVendedor, filterEmpresa, filterProvincia, filterSemana, filterDia].forEach(sel=>{
-    sel.addEventListener("change", ()=>{
-      const rows = currentFiltered();
-      renderList(rows);
-      renderTable(rows);
-      renderPins(rows);
-    });
-  });
-  txtSearch.addEventListener("input", ()=>{
-    const rows = currentFiltered();
-    renderList(rows);
-    renderTable(rows);
-    renderPins(rows);
-  });
-
-  // Boot: initialize the map so it's always visible
   document.addEventListener("DOMContentLoaded", ()=>{ initMap(); });
   </script>
 </body>
