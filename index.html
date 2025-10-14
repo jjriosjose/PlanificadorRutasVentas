@@ -1,243 +1,1721 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Planificador de Rutas - index</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-  <style>
-    html,body,#app{height:100%;}
-    #app{display:flex;flex-direction:column;background:#f8fafc}
-    header{background:white}
-    #container{flex:1;display:grid;grid-template-columns:320px 1fr;gap:12px;padding:12px;max-width:1400px;margin:0 auto}
-    #map{height:calc(100vh - 140px);border-radius:8px;border:1px solid #e2e8f0}
-    .panel{background:white;padding:12px;border-radius:8px;border:1px solid #e2e8f0}
-    table td, table th{padding:6px;border-bottom:1px solid #eef2f7}
-    .small{font-size:13px;color:#475569}
-    .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Planificador de Ruta · RD — v1.1.6</title>
+
+<!-- Leaflet (sin clustering) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- XLSX & CSV -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<!-- Icons -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lucide-static@0.469.0/font/lucide.css">
+
+<style>
+:root{
+  --bg:#f7f8fb;
+  --panel:#ffffff;
+  --text:#1f2937;
+  --muted:#6b7280;
+  --brand:#0ea5e9;
+  --ok:#16a34a;
+  --warn:#f59e0b;
+  --danger:#ef4444;
+  --shadow: 0 10px 20px rgba(0,0,0,.06);
+  --radius:16px;
+  --radius-sm:10px;
+  --gap:14px;
+  --accent:#2563eb;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,Helvetica,sans-serif;
+  color:var(--text);
+  background:var(--bg);
+}
+header{
+  position:sticky; top:0; z-index:40;
+  backdrop-filter:saturate(1.2) blur(8px);
+  background:rgba(247,248,251,.75);
+  border-bottom:1px solid #e5e7eb;
+}
+.header-wrap{
+  max-width:1400px; margin:0 auto; padding:12px 18px;
+  display:flex; align-items:center; gap:12px; justify-content:space-between;
+}
+.brand{
+  display:flex; align-items:center; gap:12px;
+  font-weight:700; letter-spacing:.2px;
+}
+.badge{background:#e0f2fe;color:#0369a1;padding:4px 8px;border-radius:999px;font-size:12px;}
+.version{background:#ecfeff;color:#155e75;padding:4px 8px;border-radius:999px;font-size:12px;}
+
+.container{
+  max-width:1400px; margin:18px auto; padding:0 18px;
+  display:grid; grid-template-columns: 390px 1fr;
+  gap:18px;
+}
+@media (max-width: 1200px){
+  .container{ grid-template-columns: 1fr; }
+}
+
+.panel{
+  background:var(--panel);
+  border:1px solid #e5e7eb; border-radius:var(--radius);
+  box-shadow:var(--shadow);
+}
+.panel h3{margin:0; padding:14px 16px; border-bottom:1px solid #e5e7eb; font-size:16px}
+.section{padding:14px 16px; border-top:1px dashed #eef2f7}
+.row{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+label{font-size:12px; color:var(--muted); display:block; margin-bottom:6px}
+select,input[type="text"],input[type="number"]{
+  width:100%; padding:10px 12px; border-radius:10px; border:1px solid #e5e7eb; background:#fff;
+  font-size:14px; color:var(--text);
+}
+button{
+  border:0; padding:10px 14px; border-radius:12px; font-weight:600; cursor:pointer;
+}
+.btn{background:#0ea5e9;color:#fff}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-ghost{background:#eef2f7;color:#0f172a}
+.btn-green{background:var(--ok); color:#fff}
+.btn-red{background:var(--danger); color:#fff}
+
+.map-wrap{
+  display:grid; grid-template-rows: 52px 1fr minmax(520px, 75vh); gap:12px; height:calc(100vh - 120px);
+}
+.toolbar{
+  display:flex; gap:10px; align-items:center; padding:8px 10px;
+}
+.toolbar .spacer{flex:1}
+#map{width:100%; height:100%; min-height:320px; border-radius:var(--radius); border:1px solid #e5e7eb}
+.table{
+  height:58vh; max-height:70vh; overflow:auto; border:1px solid #e5e7eb; border-radius:var(--radius);
+}
+
+/* --- Multi-selección de vendedores estilo checklist --- */
+.multi-select {
+  position: relative;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 6px 8px;
+  min-height: 36px;
+  cursor: pointer;
+  background-color: #fff;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.multi-select .selected-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1;
+}
+.multi-select .chip {
+  background-color: #eef2ff;
+  color: #3730a3;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+/* Ajustamos z-index para que la lista desplegable se vea por encima del mapa */
+.multi-select .dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1010;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  background-color: #fff;
+  border-radius: 10px;
+  margin-top: 4px;
+  box-shadow: var(--shadow);
+  display: none;
+}
+.multi-select .dropdown label {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.multi-select .dropdown label:hover {
+  background-color: #f1f5f9;
+}
+.multi-select .dropdown input[type="checkbox"] {
+  margin-right: 8px;
+}
+table{width:100%; border-collapse:separate; border-spacing:0}
+th,td{font-size:13px; padding:10px 8px; border-bottom:1px solid #eef2f7}
+th{position:sticky; top:0; background:#f8fafc; z-index:2; text-align:left}
+tfoot td{background:#fafafa; position:sticky; bottom:0}
+.chips{display:flex; gap:6px; flex-wrap:wrap}
+.chips .chip{background:#eef2ff;color:#3730a3;padding:4px 8px;font-size:12px;border-radius:999px}
+
+.small{font-size:12px; color:var(--muted)}
+hr.sep{border:0;border-top:1px dashed #e5e7eb;margin:12px 0}
+.checkbox{display:flex; gap:8px; align-items:center}
+.note{background:#f8fafc;border:1px dashed #e2e8f0;padding:10px;border-radius:12px;font-size:12px;color:#475569}
+
+footer{max-width:1400px;margin:16px auto 32px;padding:0 18px;color:#64748b;font-size:12px}
+kbd{background:#e2e8f0;border-radius:6px;padding:2px 6px}
+.badge-info{background:#ecfeff;color:#155e75;padding:3px 6px;border-radius:999px;font-size:11px;margin-left:6px}
+
+/* tamano de selects en tabla para ver valores claramente */
+#planTable select.edit-semana{ min-width:64px; width:64px; text-align:center; }
+#planTable select.edit-dia{ min-width:86px; width:86px; }
+
+</style>
 </head>
 <body>
-  <div id="app">
-    <header class="panel flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 20l-5.447-2.724A2 2 0 013 15.382V6a2 2 0 012-2h14a2 2 0 012 2v9.382a2 2 0 01-1.553 1.894L15 20M9 20v-6a2 2 0 012-2h2a2 2 0 012 2v6"/></svg>
-        <div>
-          <div class="text-lg font-semibold">Planificador de Rutas Comercial</div>
-          <div class="small">index.html — Abre localmente o sube a GitHub Pages</div>
-        </div>
-      </div>
-      <div class="flex items-center gap-3">
-        <div class="small">Módulos: <span class="badge bg-slate-100">Mapa</span> <span class="badge bg-slate-100">Clientes</span> <span class="badge bg-slate-100">Planificación</span> <span class="badge bg-slate-100">Exportar</span></div>
-        <button id="btn-sample" class="px-3 py-2 bg-sky-600 text-white rounded">Cargar muestra</button>
-      </div>
-    </header>
-
-    <div id="container">
-      <aside class="panel">
-        <div class="mb-3">
-          <label class="block text-sm font-medium">Cargar archivo (.xlsx/.xls/.csv)</label>
-          <input id="input-file" type="file" accept=".xlsx,.xls,.csv" class="w-full mt-2" />
-        </div>
-
-        <div class="mb-3 flex gap-2">
-          <select id="vendor-select" class="flex-1 p-2 border rounded">
-            <option value="__all">-- Todos los vendedores --</option>
-          </select>
-          <button id="btn-auto-assign" class="px-3 py-2 bg-amber-500 text-white rounded">Auto asignar semanas</button>
-        </div>
-
-        <div class="mb-3 grid grid-cols-2 gap-2">
-          <button id="btn-generate-routes" class="px-3 py-2 bg-emerald-600 text-white rounded">Generar rutas</button>
-          <button id="btn-export-csv" class="px-3 py-2 bg-slate-700 text-white rounded">Exportar CSV</button>
-        </div>
-
-        <div class="mb-3">
-          <label class="block text-sm font-medium">Buscar</label>
-          <input id="search" class="w-full p-2 border rounded mt-2" placeholder="RazonSocial / Empresa / Provincia" />
-        </div>
-
-        <div class="mb-3 small"><strong>Estado:</strong> <span id="status">Esperando archivo...</span></div>
-
-        <div class="mb-3">
-          <details class="small">
-            <summary class="font-medium">Instrucciones rápidas</summary>
-            <ul class="mt-2 list-disc pl-4 small">
-              <li>Carga tu archivo Excel (.xlsx) con columnas: provincia, vendedor, gestor_servicio, Empresa, Cod Empresa, RazonSocial, latitud, longitud.</li>
-              <li>Usa <em>Auto asignar semanas</em> para repartir clientes por semanas 1‑4.</li>
-              <li>Usa <em>Generar rutas</em> para ordenar por vecino más cercano y asignar días Lun‑Vie.</li>
-              <li>Exporta el resultado en CSV.</li>
-            </ul>
-          </details>
-        </div>
-
-        <hr class="my-2" />
-        <div>
-          <div class="font-medium small mb-1">Control de vista</div>
-          <div class="flex gap-2">
-            <button id="show-all" class="px-2 py-1 border rounded small">Todos</button>
-            <button id="show-week1" class="px-2 py-1 border rounded small">Semana 1</button>
-            <button id="show-week2" class="px-2 py-1 border rounded small">Semana 2</button>
-            <button id="show-week3" class="px-2 py-1 border rounded small">Semana 3</button>
-            <button id="show-week4" class="px-2 py-1 border rounded small">Semana 4</button>
-          </div>
-        </div>
-      </aside>
-
-      <main>
-        <div id="map" class="mb-4"></div>
-
-        <div class="panel">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="font-semibold">Clientes</h3>
-            <div class="small">Registros: <span id="count">0</span></div>
-          </div>
-
-          <div style="max-height:280px;overflow:auto">
-            <table style="width:100%">
-              <thead>
-                <tr><th>#</th><th>Provincia</th><th>Vendedor</th><th>RazonSocial</th><th>Lat</th><th>Lon</th><th>Semana</th><th>Día</th></tr>
-              </thead>
-              <tbody id="table-body"></tbody>
-            </table>
-          </div>
-        </div>
-      </main>
+<header>
+  <div class="header-wrap">
+    <div class="brand">
+      <span class="lucide lucide-map-pin"></span>
+      <span>Planificador de Ruta · RD</span>
+      <span class="badge">Mapa + Plan</span>
+    </div>
+    <div class="chips">
+      <span class="chip">Semanas 1–4</span>
+      <span class="chip">Lun–Vie, Sáb opcional</span>
+      <span class="version">v1.1.6</span>
     </div>
   </div>
+</header>
 
-  <!-- Librerías -->
-  <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<main class="container">
+  <!-- Sidebar -->
+  <aside class="panel" id="sidebar">
+    <h3>Cargar datos (Google Sheets CSV o Excel/CSV)</h3>
+    <div class="section">
+      <div class="row" style="grid-template-columns:1fr auto">
+        <input id="gsheetUrl" type="text" placeholder="https://docs.google.com/.../pub?output=csv">
+        <button class="btn" id="btnLoadGSheet">Cargar</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label>Seleccionar archivo</label>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
+      </div>
+      <div class="note" style="margin-top:10px">
+        Acepta columnas típicas: <b>provincia, gestor_servicio, vendedor, empresa, razon_social, latitud, longitud</b>.
+        Puedes mapear nombres distintos en la sección siguiente.
+      </div>
+    </div>
 
-  <script>
-    // Datos
-    let rawData = [];
-    let map, markersLayer, routesLayer;
+    <h3>Mapeo</h3>
+    <div class="section" id="mapping">
+      <div class="row">
+        <div><label>provincia</label><select id="map-provincia"></select></div>
+        <div><label>DÍA</label><select id="map-dia"></select></div>
+        <div><label>SEMANA</label><select id="map-semana"></select></div>
+        <div><label>vendedor</label><select id="map-vendedor"></select></div>
+        <div><label>gestor_servicio</label><select id="map-gestor"></select></div>
+        <div><label>cod_empresa</label><select id="map-codempresa"></select></div>
+        <div><label>empresa</label><select id="map-empresa"></select></div>
+        <div><label>razon_social</label><select id="map-razon"></select></div>
+        <div><label>latitud</label><select id="map-lat"></select></div>
+        <div><label>longitud</label><select id="map-lon"></select></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn-ghost" id="btnAutoMap">Autodetectar</button>
+        <button class="btn" id="btnApplyMap">Aplicar</button>
+      </div>
+    </div>
 
-    function setStatus(t){ document.getElementById('status').innerText = t; }
+    <h3>Asignación & preferencias</h3>
+    <div class="section">
+      <div class="row">
+        <div>
+          <label>Modo</label>
+          <select id="mode">
+            <option>Balanceado + Cercanía</option>
+            <option>Sólo cercanía</option>
+            <option>Balanceado</option>
+          </select>
+        </div>
+        <div>
+          <label>Límite/día</label>
+          <input id="limitPerDay" type="number" min="1" value="8"/>
+        </div>
+      </div>
+      <div class="checkbox" style="margin-top:10px">
+        <input type="checkbox" id="chkSabado" />
+        <label for="chkSabado">Incluir sábado</label>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:12px">
+        <button class="btn-green" id="btnProcesar">Procesar y asignar</button>
+        <button class="btn-red" id="btnLimpiar">Limpiar</button>
+      </div>
+      <hr class="sep"/>
+      <div class="row">
+        <div>
+          <label>Buscar…</label>
+          <input type="text" id="searchBox" placeholder="Razón social / vendedor / gestor / empresa" />
+        </div>
+        <div>
+          <label>Centro inicial del mapa</label>
+          <input type="text" id="mapCenter" placeholder="18.735693,-70.162651 (RD)" value="18.735693,-70.162651"/>
+        </div>
+      </div>
+      <div class="small" style="margin-top:8px">Consejo: guarda tus mapeos y preferencias en el navegador.</div>
+      <div style="display:flex; gap:8px; margin-top:10px">
+        <button class="btn-ghost" id="btnGuardarPrefs">Guardar prefs</button>
+        <button class="btn-ghost" id="btnCargarPrefs">Cargar prefs</button>
+      </div>
+    </div>
 
-    function initMap(){
-      map = L.map('map', {preferCanvas:true}).setView([18.6, -69.9], 8);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(map);
-      markersLayer = L.layerGroup().addTo(map);
-      routesLayer = L.layerGroup().addTo(map);
+  </aside>
+
+  <!-- Map + Table -->
+  <section class="panel map-wrap">
+    <div class="toolbar">
+      <div class="chips">
+        <span class="chip" title="Semana 1 a 4 del mes">Semanas</span>
+        <span class="chip">Filtros rápidos</span>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn-ghost" id="btnFit">Enfocar RD</button>
+      <button class="btn-ghost" id="btnExportCSV">Exportar CSV</button>
+      <button class="btn" id="btnExportXLSX">Exportar Excel</button>
+      <!-- Botón para animar la ruta mostrada. Se habilita cuando hay al menos dos puntos en la vista -->
+      <button class="btn-ghost" id="btnAnimate" title="Reproducir/pausar animación de la ruta" disabled>▶️</button>
+      <!-- Checkbox para mostrar u ocultar las líneas de ruta -->
+      <label style="display:flex;align-items:center;gap:4px;font-size:13px;margin-left:8px">
+        <input type="checkbox" id="chkShowRoutes" checked style="margin:0" />
+        Mostrar rutas
+      </label>
+    </div>
+
+    <!-- Filtros (editables y combinables) -->
+    <div class="section" style="padding:10px 12px; border:1px dashed #e5e7eb; margin:0 12px; border-radius:12px">
+      <div class="row" style="grid-template-columns: repeat(5, 1fr); gap:10px">
+        <div>
+          <label>Vendedores<span class="badge-info" id="vendCount"></span></label>
+          <!-- Select subyacente para el filtro de vendedor (se oculta) -->
+          <select id="fltVendedor" multiple style="display:none"></select>
+          <!-- Componente de multi-selección con checklist -->
+          <div id="vendorMulti" class="multi-select">
+            <div class="selected-chips"></div>
+            <div class="dropdown"></div>
+          </div>
+        </div>
+        <div><label>Empresas</label><select id="fltEmpresa"></select></div>
+        <div><label>Provincias</label><select id="fltProvincia"></select></div>
+        <div><label>Semanas</label><select id="fltSemana"></select></div>
+        <div><label>Días</label><select id="fltDia"></select></div>
+      </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="table">
+      <table id="planTable">
+        <thead>
+          <tr>
+            <th>Parada</th>
+            <th>Provincia</th>
+            <th>Día</th>
+            <th>Semana</th>
+            <th>Vendedor</th>
+            <th>Gestor</th>
+            <th>Empresa</th>
+            <th>Razón Social</th>
+            <th>Lat</th>
+            <th>Lon</th>
+            <th>Visitado</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+        <tfoot>
+          <tr><td colspan="11" id="tableInfo">0 clientes en el plan.</td></tr>
+        </tfoot>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div>Planificador de Ruta · RD — <b>v1.1.6</b>. Igual que tu versión estable, con pines <b>desagrupados</b>.</div>
+</footer>
+
+<script>
+/* ---------- Utilidades ---------- */
+const $ = (q, root=document) => root.querySelector(q);
+const $$ = (q, root=document) => Array.from(root.querySelectorAll(q));
+const haversine = (a, b) => {
+  const toRad = d => d*Math.PI/180;
+  const R = 6371;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const lat1 = toRad(a.lat), lat2 = toRad(b.lat);
+  const hh = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(hh));
+};
+const clean = v => (v==null ? "" : String(v).trim());
+
+/* ---------- Enumeración de paradas ---------- */
+// Asigna un número de parada (1,2,3,...) para cada combinación de vendedor, semana y día.
+// Los números se basan en el orden de asignación (propiedad __id) dentro de cada grupo.
+function assignOrder(rows){
+  // Calcula la ruta óptima por proximidad para enumerar las paradas de cada vendedor/día/semana
+  if(!Array.isArray(rows)) return;
+  // Agrupar por vendedor, semana y día
+  const groups = {};
+  rows.forEach(r => {
+    const key = `${r.vendedor||''}|${r.semana||''}|${r.dia||''}`;
+    (groups[key] ||= []).push(r);
+  });
+  const toRad = d => d * Math.PI / 180;
+  const distFn = (a,b) => {
+    const R = 6371;
+    const dLat = toRad(b.lat - a.lat);
+    const dLon = toRad(b.lon - a.lon);
+    const lat1 = toRad(a.lat), lat2 = toRad(b.lat);
+    const hh = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+    return 2*R*Math.asin(Math.sqrt(hh));
+  };
+  Object.values(groups).forEach(list => {
+    // Filtrar registros con lat/lon válidos
+    const pts = list.filter(r => Number.isFinite(r.lat) && Number.isFinite(r.lon));
+    const remaining = pts.slice();
+    const ordered = [];
+    // Comenzar con el primer elemento por orden actual
+    if(remaining.length){
+      ordered.push(remaining.shift());
     }
-
-    function clearLayers(){ markersLayer.clearLayers(); routesLayer.clearLayers(); }
-
-    function plotAll(filterWeek=null){
-      clearLayers();
-      const valid = rawData.filter(r=>r.latitud && r.longitud && (filterWeek? String(r.semana)===String(filterWeek) : true));
-      valid.forEach(r=>{
-        const color = r.semana ? weekColor(r.semana) : '#1e40af';
-        const marker = L.circleMarker([r.latitud, r.longitud], {radius:6, fillColor:color, color:'#000', weight:0.6, fillOpacity:0.9});
-        marker.bindPopup(`<strong>${escapeHtml(r.RazonSocial)}</strong><br>${escapeHtml(r.Empresa)}<br>${escapeHtml(r.provincia)}<br><em>Vendedor:</em> ${escapeHtml(r.vendedor)}<br><em>Semana:</em> ${r.semana||'-'}<br><em>Día:</em> ${r.dia||'-'}`);
-        marker.addTo(markersLayer);
-      });
-      document.getElementById('count').innerText = valid.length;
-      if(valid.length) map.fitBounds(valid.map(r=>[r.latitud,r.longitud]), {padding:[40,40]});
+    while(remaining.length){
+      const last = ordered[ordered.length-1];
+      let bestIdx = 0;
+      let bestDist = Infinity;
+      for(let i=0;i<remaining.length;i++){
+        const d = distFn({lat:last.lat, lon:last.lon}, {lat:remaining[i].lat, lon:remaining[i].lon});
+        if(d < bestDist){ bestDist = d; bestIdx = i; }
+      }
+      ordered.push(remaining.splice(bestIdx,1)[0]);
     }
+    // Asignar orden
+    ordered.forEach((r,i) => { r._orden = i + 1; });
+    // Los registros que no tienen coordenadas válidas se ponen al final
+    const invalids = list.filter(r => !Number.isFinite(r.lat) || !Number.isFinite(r.lon));
+    invalids.forEach((r,i) => { r._orden = ordered.length + i + 1; });
+  });
+}
 
-    function weekColor(w){ switch(String(w)){ case '1': return '#ef4444'; case '2': return '#f59e0b'; case '3': return '#10b981'; case '4': return '#3b82f6'; default: return '#64748b'; } }
+/* ---------- Helpers de color ---------- */
+// Devuelve un color consistente para cada vendedor. Se basa en sumar los códigos de
+// caracteres del nombre y mapearlos a una paleta fija. Usado para colorear pines y
+// rutas por vendedor.
+function colorByVendor(name){
+  const palette = ['#2563eb','#16a34a','#dc2626','#f59e0b','#7c3aed','#0891b2','#be185d','#10b981','#0ea5e9','#334155','#ef4444','#22c55e'];
+  if(!name) return palette[0];
+  const sum = String(name).split('').reduce((a,c)=>a + c.charCodeAt(0), 0);
+  const idx = Math.abs(sum) % palette.length;
+  return palette[idx];
+}
 
-    function escapeHtml(str){ if(!str) return ''; return String(str).replace(/[&<>\"']/g, function(s){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[s]; }); }
-
-    // Leer Excel
-    document.getElementById('input-file').addEventListener('change', async (e)=>{
-      const f = e.target.files[0]; if(!f) return;
-      setStatus('Cargando archivo...');
-      try{
-        const data = await f.arrayBuffer();
-        const workbook = XLSX.read(data);
-        const sheetName = workbook.SheetNames[0];
-        const ws = workbook.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json(ws, {defval:''});
-        processLoaded(json);
-      }catch(err){ console.error(err); alert('Error leyendo archivo: '+err.message); setStatus('Error al cargar archivo'); }
+// Íconos por vendedor para los marcadores tipo pin. Utilizamos la colección
+// "leaflet-color-markers" (colores limitados) y mapeamos los vendedores a un color.
+const markerColorList = ['blue','green','red','orange','yellow','violet','grey','black','gold'];
+const vendorIconsCache = {};
+function getVendorIcon(name){
+  const sum = String(name||'').split('').reduce((a,c)=>a + c.charCodeAt(0), 0);
+  const idx = Math.abs(sum) % markerColorList.length;
+  const color = markerColorList[idx];
+  const key = color;
+  if(!vendorIconsCache[key]){
+    vendorIconsCache[key] = L.icon({
+      iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+      shadowUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-shadow.png`,
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41]
     });
+  }
+  return vendorIconsCache[key];
+}
 
-    function processLoaded(json){
-      rawData = json.map((r,i)=>({ __idx: i+1, provincia: r.provincia||r.Provincia||r.Province||'', vendedor: (r.vendedor||r.Vendedor||'SIN ASIGNAR')+'', gestor_servicio: r.gestor_servicio||r.Gestor||'', Empresa: r.Empresa||r.empresa||'', CodEmpresa: r['Cod Empresa']||r.Cod||'', RazonSocial: r.RazonSocial||r['Razon Social']||r['Razón Social']||'', latitud: parseFloat(r.latitud||r.Latitud||r.lat||r.Lat) || null, longitud: parseFloat(r.longitud||r.Longitud||r.lon||r.Lon) || null, semana:'', dia:'' }));
-      setStatus('Archivo cargado: '+rawData.length+' registros');
-      populateVendorSelect(); renderTable(); plotAll();
+function uniq(arr){ return Array.from(new Set(arr.filter(Boolean))).sort((a,b)=>String(a).localeCompare(String(b),'es')); }
+function fillSelect(sel, values, withAll=true, labelAll='(Todos)'){
+  sel.innerHTML = '';
+  if(withAll){ const o = document.createElement('option'); o.value=''; o.textContent=labelAll; sel.appendChild(o); }
+  values.forEach(v => { const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
+}
+
+/* ---------- Estado ---------- */
+let rawRows = [];      // filas originales (objetos con columnas)
+let mappedRows = [];   // filas con nombres estandar
+let markerLayer;       // CAPA DE MARCADORES (sin clúster)
+let plan = [];         // plan resultante (asignado)
+let filteredPlan = []; // vista filtrada
+let vendors = []; let empresas=[]; let provincias=[];
+
+/* ---------- Mapa ---------- */
+const map = L.map('map', { zoomControl: true });
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap',
+  maxZoom: 19
+}).addTo(map);
+const rdBounds = L.latLngBounds([17.4,-72],[20.1,-68.1]);
+map.fitBounds(rdBounds);
+// SIN cluster: capa simple
+markerLayer = L.layerGroup().addTo(map);
+
+// Control global para mostrar u ocultar las líneas de ruta. Se puede activar mediante el checkbox en la barra de herramientas.
+window.showRoutes = true;
+
+// --- Ubicación actual del usuario ---
+// Guardaremos la ubicación del usuario para iniciar las rutas desde aquí. Si el
+// navegador permite el acceso a geolocalización, marcamos la posición y
+// centramos el mapa en ella ligeramente. Se guarda en window.userLocation.
+window.userLocation = null;
+if (navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(function(pos){
+    const { latitude, longitude } = pos.coords;
+    window.userLocation = { lat: latitude, lon: longitude };
+    // Añade un marcador especial para la ubicación actual
+    L.marker([latitude, longitude], {
+      title: 'Tu ubicación',
+      icon: L.icon({
+        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [0, -41]
+      })
+    }).addTo(map).bindPopup('Ubicación actual');
+    // Opcional: centra el mapa sobre la ubicación si no hay marcadores
+    // map.setView([latitude, longitude], 9);
+  }, function(err){
+    console.warn('No se pudo obtener la ubicación del usuario', err);
+  });
+}
+
+function fitRD(){
+  const v = $('#mapCenter').value.trim();
+  if(v && v.includes(',')){
+    const [lt, ln] = v.split(',').map(Number);
+    if(!Number.isNaN(lt) && !Number.isNaN(ln)){
+      map.setView([lt, ln], 7);
+      return;
     }
+  }
+  map.fitBounds(rdBounds);
+}
+$('#btnFit').addEventListener('click', fitRD);
 
-    function populateVendorSelect(){
-      const sel = document.getElementById('vendor-select'); sel.innerHTML = '<option value="__all">-- Todos los vendedores --</option>';
-      const vendors = Array.from(new Set(rawData.map(r=>r.vendedor||'SIN ASIGNAR'))).sort();
-      vendors.forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
+/* ---------- Carga de datos ---------- */
+function headersFromRows(rows){
+  const set = new Set();
+  rows.forEach(r => Object.keys(r).forEach(k => set.add(k)));
+  return Array.from(set);
+}
+function fillMappingSelectors(headers){
+  const targets = [
+    'map-provincia','map-dia','map-semana','map-vendedor','map-gestor',
+    'map-codempresa','map-empresa','map-razon','map-lat','map-lon'
+  ];
+  targets.forEach(id => {
+    const sel = $('#'+id);
+    sel.innerHTML = '<option value="">(no usar)</option>' + headers.map(h=>`<option>${h}</option>`).join('');
+  });
+}
+function tryAutoMap(headers){
+  const mapKeys = (name) => {
+    const lower = name.toLowerCase();
+    const candidates = headers.filter(h => h.toLowerCase()===lower || h.toLowerCase().includes(lower));
+    return candidates[0] || "";
+  };
+  $('#map-provincia').value = mapKeys('provincia');
+  $('#map-dia').value = mapKeys('dia');
+  $('#map-semana').value = mapKeys('semana');
+  $('#map-vendedor').value = mapKeys('vendedor');
+  $('#map-gestor').value = mapKeys('gestor_servicio') || mapKeys('gestor');
+  $('#map-codempresa').value = mapKeys('cod_empresa') || mapKeys('codigo_empresa');
+  $('#map-empresa').value = mapKeys('empresa');
+  $('#map-razon').value = mapKeys('razon_social') || mapKeys('razonsocial') || mapKeys('nombre');
+  $('#map-lat').value = mapKeys('latitud') || mapKeys('lat');
+  $('#map-lon').value = mapKeys('longitud') || mapKeys('lon') || mapKeys('lng');
+}
+function applyMapping(){
+  const m = {
+    provincia: $('#map-provincia').value,
+    dia: $('#map-dia').value,
+    semana: $('#map-semana').value,
+    vendedor: $('#map-vendedor').value,
+    gestor: $('#map-gestor').value,
+    cod_empresa: $('#map-codempresa').value,
+    empresa: $('#map-empresa').value,
+    razon: $('#map-razon').value,
+    lat: $('#map-lat').value,
+    lon: $('#map-lon').value,
+  };
+  mappedRows = rawRows.map((r, idx) => ({
+    __id: idx + 1,
+    provincia: clean(r[m.provincia]),
+    dia: clean(r[m.dia]) || '',
+    semana: Number(clean(r[m.semana])) || '',
+    vendedor: clean(r[m.vendedor]),
+    gestor: clean(r[m.gestor]) || 'NO ASIGNADO',
+    cod_empresa: clean(r[m.cod_empresa]),
+    empresa: clean(r[m.empresa]),
+    razon: clean(r[m.razon]),
+    lat: Number(clean(r[m.lat])),
+    lon: Number(clean(r[m.lon])),
+    visitado: '',
+    // número de visitas al mes (por defecto 1) si la columna 'visitas', 'visitas_mes' o similar existe
+    visitas: (() => {
+      let vRaw = '';
+      // intentar detectar nombre de columna de visitas en la fila original
+      if (r['visitas'] !== undefined) vRaw = clean(r['visitas']);
+      else if (r['visitas_mes'] !== undefined) vRaw = clean(r['visitas_mes']);
+      else if (r['visitas mes'] !== undefined) vRaw = clean(r['visitas mes']);
+      const num = Number(vRaw);
+      return (Number.isFinite(num) && num > 0) ? num : 1;
+    })()
+  })).filter(x => !Number.isNaN(x.lat) && !Number.isNaN(x.lon));
+  vendors = uniq(mappedRows.map(x=>x.vendedor));
+  empresas = uniq(mappedRows.map(x=>x.empresa));
+  provincias = uniq(mappedRows.map(x=>x.provincia));
+  drawMarkers(mappedRows);
+  plan = []; updateFiltersUI(); updateTable([]);
+  $('#vendCount').textContent = vendors.length? `${vendors.length}` : '';
+}
+function updateFiltersUI(){
+  fillSelect($('#fltVendedor'), vendors);
+  fillSelect($('#fltEmpresa'), empresas);
+  fillSelect($('#fltProvincia'), provincias);
+  fillSelect($('#fltSemana'), [1,2,3,4].map(String));
+  fillSelect($('#fltDia'), ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']);
+}
+
+/* Google Sheets (CSV público) */
+$('#btnLoadGSheet').addEventListener('click', async () => {
+  const url = $('#gsheetUrl').value.trim();
+  if(!url) return alert('Pega una URL pública de Google Sheets con ?output=csv');
+  try{
+    const res = await fetch(url);
+    const text = await res.text();
+    const parsed = Papa.parse(text, { header:true, skipEmptyLines:true });
+    rawRows = parsed.data;
+    const headers = headersFromRows(rawRows);
+    fillMappingSelectors(headers);
+    tryAutoMap(headers);
+    alert('CSV cargado. Revisa el mapeo y pulsa Aplicar.');
+  }catch(e){
+    console.error(e);
+    alert('No se pudo cargar el CSV. Verifica que sea público.');
+  }
+});
+
+/* Archivos locales */
+$('#fileInput').addEventListener('change', async (ev) => {
+  const file = ev.target.files[0];
+  if(!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  if(ext === 'csv'){
+    const text = await file.text();
+    const parsed = Papa.parse(text, { header:true, skipEmptyLines:true });
+    rawRows = parsed.data;
+  }else{
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, { type:'array' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    rawRows = XLSX.utils.sheet_to_json(sheet, { defval:"" });
+  }
+  const headers = headersFromRows(rawRows);
+  fillMappingSelectors(headers);
+  tryAutoMap(headers);
+  alert('Archivo cargado. Revisa el mapeo y pulsa Aplicar.');
+});
+
+$('#btnAutoMap').addEventListener('click', () => tryAutoMap(headersFromRows(rawRows)));
+$('#btnApplyMap').addEventListener('click', applyMapping);
+
+/* ---------- Asignación (Semanas 1–4, Lun–Vie + Sábado opcional) ---------- */
+function assignVisits(rows){
+  const includeSat = $('#chkSabado').checked;
+  const limit = Math.max(1, Number($('#limitPerDay').value) || 8);
+
+  const days = includeSat
+    ? ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
+    : ['Lunes','Martes','Miércoles','Jueves','Viernes'];
+
+  const weeks = [1,2,3,4];
+  const byVendedor = {};
+  // Extender filas según número de visitas por mes
+  const extendedRows = [];
+  rows.forEach(r => {
+    const count = Math.max(1, Number(r.visitas) || 1);
+    for(let i=0; i<count; i++){
+      // clonar la fila; asignar nueva __id para evitar duplicados
+      extendedRows.push({ ...r, __id: r.__id * 1000 + i });
     }
+  });
+  // Agrupar por vendedor
+  extendedRows.forEach(r => {
+    const key = r.vendedor || 'Sin vendedor';
+    (byVendedor[key] ||= []).push(r);
+  });
 
-    function renderTable(filter=''){
-      const tbody = document.getElementById('table-body'); tbody.innerHTML='';
-      const vendorFilter = document.getElementById('vendor-select').value;
-      const rows = rawData.filter(r=>{ if(vendorFilter && vendorFilter!=='__all' && r.vendedor!==vendorFilter) return false; if(filter){ const s=(r.RazonSocial+' '+r.Empresa+' '+r.provincia).toLowerCase(); return s.includes(filter.toLowerCase()); } return true; });
-      rows.forEach(r=>{
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${r.__idx}</td><td>${escapeHtml(r.provincia)}</td><td>${escapeHtml(r.vendedor)}</td><td>${escapeHtml(r.RazonSocial)}</td><td>${r.latitud||''}</td><td>${r.longitud||''}</td><td>${r.semana||''}</td><td>${r.dia||''}</td>`;
-        tbody.appendChild(tr);
-      });
-    }
-
-    document.getElementById('vendor-select').addEventListener('change', ()=>{ renderTable(); plotAll(); });
-    document.getElementById('search').addEventListener('input',(e)=>{ renderTable(e.target.value); });
-
-    // Botones
-    document.getElementById('btn-auto-assign').addEventListener('click', ()=>{
-      if(!rawData.length) return alert('Carga primero un archivo.');
-      setStatus('Auto asignando semanas...');
-      const vendors = Array.from(new Set(rawData.map(r=>r.vendedor||'SIN ASIGNAR')));
-      vendors.forEach(v=>{
-        const items = rawData.filter(r=>r.vendedor===v && r.latitud && r.longitud).map(r=>({...r}));
-        if(!items.length) return;
-        const ordered = nearestNeighborOrder(items);
-        const chunkSize = Math.ceil(ordered.length/4)||1;
-        for(let i=0;i<ordered.length;i++){
-          const week = Math.min(4, Math.floor(i/chunkSize)+1);
-          const idx = rawData.findIndex(rr=>rr.__idx===ordered[i].__idx);
-          if(idx>=0){ rawData[idx].semana = String(week); rawData[idx].dia = ''; }
+  const result = [];
+  for(const [vend, items] of Object.entries(byVendedor)){
+    // Ordenar por cercanía con algoritmo de vecino más cercano
+    const pool = items.slice();
+    const ordered = [];
+    if(pool.length){
+      let current = pool.shift();
+      ordered.push(current);
+      while(pool.length){
+        let bestIdx = 0, bestDist = Infinity;
+        for(let i=0;i<pool.length;i++){
+          const d = haversine({lat:current.lat,lon:current.lon},{lat:pool[i].lat,lon:pool[i].lon});
+          if(d < bestDist){ bestDist = d; bestIdx = i; }
         }
-      });
-      setStatus('Semanas asignadas.'); renderTable(); plotAll();
-    });
+        current = pool.splice(bestIdx,1)[0];
+        ordered.push(current);
+      }
+    }
+    // Distribuir visitas en un patrón columna-major: primero todos los lunes de las 4 semanas, luego martes, etc.
+    for(let i=0;i<ordered.length;i++){
+      const cellIndex = Math.floor(i / limit);
+      // número de semanas
+      const wCount = weeks.length;
+      const dCount = days.length;
+      // Determinar día y semana utilizando un patrón columna-major
+      const dayIndex = Math.floor(cellIndex / wCount) % dCount;
+      const weekIndex = cellIndex % wCount;
+      const w = weeks[weekIndex];
+      const d = days[dayIndex];
+      const r = ordered[i];
+      result.push({ ...r, semana:w, dia:d });
+    }
+  }
+  return result;
+}
+$('#btnProcesar').addEventListener('click', () => {
+  if(!mappedRows.length) return alert('Primero carga datos y aplica el mapeo.');
+  // Selecciona todas las filas para la asignación. El filtrado por vendedor se realiza
+  // únicamente al visualizar mediante los filtros, no durante la asignación.
+  let rowsToAssign = mappedRows.slice();
+  try{
+    if(window.filterState){
+      const fs = window.filterState;
+      // Filtrar sólo por provincia si se selecciona una geocerca
+      if(fs.provincia){
+        rowsToAssign = rowsToAssign.filter(r => r.provincia === fs.provincia);
+      }
+    }
+  }catch(e){ console.warn('Error al filtrar para asignación', e); }
+  // Ejecutar asignación usando el algoritmo seleccionado
+  const assigned = assignVisits(rowsToAssign);
+  // Mantener los __id originales cuando existan; de lo contrario, asignar nuevos
+  plan = assigned.map((r,i)=>({...r, __id: r.__id || (i+1), visitado: r.visitado || ''}));
+  vendors = uniq(plan.map(x=>x.vendedor)); $('#vendCount').textContent = vendors.length? `${vendors.length}` : '';
+  updateFiltersUI();
+  applyFiltersAndRender();
+  alert('Plan generado. Puedes editar Día/Semana/Vendedor en la tabla y filtrar arriba.');
+});
+$('#btnLimpiar').addEventListener('click', () => {
+  plan = []; mappedRows = []; rawRows = []; filteredPlan=[];
+  markerLayer.clearLayers();
+  $('#planTable tbody').innerHTML = '';
+  $('#tableInfo').textContent = '0 clientes en el plan.';
+  alert('Se limpió la vista. Vuelve a cargar datos.');
+});
 
-    document.getElementById('btn-generate-routes').addEventListener('click', ()=>{
-      if(!rawData.length) return alert('Carga primero un archivo.');
-      setStatus('Generando rutas y asignando días...');
-      const vendors = Array.from(new Set(rawData.map(r=>r.vendedor||'SIN ASIGNAR')));
-      vendors.forEach(v=>{
-        for(let week=1; week<=4; week++){
-          const bucket = rawData.filter(r=>r.vendedor===v && String(r.semana)===String(week) && r.latitud && r.longitud);
-          if(!bucket.length) continue;
-          const ordered = nearestNeighborOrder(bucket);
-          for(let i=0;i<ordered.length;i++){
-            const dayIndex = (i % 5);
-            const dias = ['Lun','Mar','Mie','Jue','Vie'];
-            const idx = rawData.findIndex(rr=>rr.__idx===ordered[i].__idx);
-            if(idx>=0) rawData[idx].dia = dias[dayIndex];
+/* ---------- Filtros ---------- */
+const filterState = { vendedor:'', empresa:'', provincia:'', semana:'', dia:'' };
+['fltVendedor','fltEmpresa','fltProvincia','fltSemana','fltDia'].forEach(id=>{
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.addEventListener('change', () => {
+    // Utiliza readFilters si está definida para actualizar filterState correctamente (multi-selección de vendedor)
+    if (typeof readFilters === 'function') {
+      readFilters();
+    } else {
+      // Fallback: copiar valores directamente
+      filterState.vendedor = (function(){
+        const sel = document.getElementById('fltVendedor');
+        if(!sel) return '';
+        if(sel.multiple){
+          return Array.from(sel.selectedOptions).map(o=>o.value).filter(v=>v);
+        }
+        return sel.value;
+      })();
+      filterState.empresa   = document.getElementById('fltEmpresa')?.value || '';
+      filterState.provincia = document.getElementById('fltProvincia')?.value || '';
+      filterState.semana    = document.getElementById('fltSemana')?.value || '';
+      filterState.dia       = document.getElementById('fltDia')?.value || '';
+    }
+    // Actualiza cascada y aplica filtros
+    if(typeof cascadeOptions === 'function') { cascadeOptions(); }
+    applyFiltersAndRender();
+  });
+});
+$('#searchBox').addEventListener('input', ()=>applyFiltersAndRender());
+
+function applyFiltersAndRender(){
+  const q = $('#searchBox').value.trim().toLowerCase();
+  filteredPlan = plan.filter(r => {
+    // Vendedor: puede ser array (selección múltiple) o cadena (uno solo). Si hay selección, acepta sólo los incluidos.
+    if(filterState.vendedor){
+      if(Array.isArray(filterState.vendedor) && filterState.vendedor.length){
+        if(!filterState.vendedor.includes(r.vendedor)) return false;
+      }else if(typeof filterState.vendedor === 'string' && filterState.vendedor){
+        if(r.vendedor !== filterState.vendedor) return false;
+      }
+    }
+    // Empresa
+    if(filterState.empresa && r.empresa !== filterState.empresa) return false;
+    // Provincia
+    if(filterState.provincia && r.provincia !== filterState.provincia) return false;
+    // Semana (convierte a string para comparar)
+    if(filterState.semana && String(r.semana) !== String(filterState.semana)) return false;
+    // Día
+    if(filterState.dia && r.dia !== filterState.dia) return false;
+    // Búsqueda libre
+    if(q){
+      const hay = [r.razon, r.vendedor, r.gestor, r.empresa].join(' ').toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  // Asignar números de parada antes de renderizar
+  assignOrder(filteredPlan);
+  updateTable(filteredPlan);
+  drawMarkers(filteredPlan);
+}
+
+/* ---------- Render de mapa y tabla ---------- */
+function drawMarkers(rows){
+  markerLayer.clearLayers();
+  // Crea marcadores tipo círculo con color según el vendedor
+  const markers = rows.map(r => {
+    // Usa un marcador tipo pin con color según el vendedor
+    const mk = L.marker([r.lat, r.lon], {
+      icon: (typeof getVendorIcon === 'function' ? getVendorIcon(r.vendedor) : undefined)
+    });
+    const html = `
+      <b>${(r.razon || '(Sin nombre)')}</b><br>
+      <span class="small">${[r.empresa, r.provincia].filter(Boolean).join(' · ')}</span><br>
+      <span class="small">Vendedor: ${r.vendedor || '-'}</span><br>
+      <span class="small">Día/Sem: ${r.dia || '-'} / ${r.semana || '-'}</span>
+    `;
+    mk.bindPopup(html);
+    return mk;
+  });
+  markers.forEach(m => markerLayer.addLayer(m));
+  // Ajusta la vista a los marcadores o recorre República Dominicana si no hay marcadores
+  if(markers.length){
+    const g = L.featureGroup(markers);
+    map.fitBounds(g.getBounds().pad(0.2));
+  }else{
+    fitRD();
+  }
+}
+
+function updateTable(rows){
+  const tb = $('#planTable tbody');
+  const days = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const vendOptions = vendors.map(v=>`<option value="${v}">${v}</option>`).join('');
+  tb.innerHTML = rows.map((r,idx) => `
+    <tr data-id="${r.__id}">
+      <td>${r._orden || ''}</td>
+      <td>${r.provincia||''}</td>
+      <td>
+        <select class="edit-dia">
+          ${days.map(d => `<option value="${d}" ${r.dia===d?'selected':''}>${d}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <select class="edit-semana">
+          ${[1,2,3,4].map(w => `<option value="${w}" ${String(r.semana)===String(w)?'selected':''}>${w}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <select class="edit-vendedor">
+          <option value="">Sin vendedor</option>
+          ${vendOptions.replace(`value="${r.vendedor}"`, `value="${r.vendedor}" selected`)}
+        </select>
+      </td>
+      <td>${r.gestor||''}</td>
+      <td>${r.empresa||''}</td>
+      <td>${r.razon||''}</td>
+      <td>${Number.isFinite(r.lat)?r.lat.toFixed(6):''}</td>
+      <td>${Number.isFinite(r.lon)?r.lon.toFixed(6):''}</td>
+      <td style="text-align:center"><input type="checkbox" class="edit-visitado" ${r.visitado?'checked':''} /></td>
+    </tr>
+  `).join('');
+  $('#tableInfo').textContent = `${rows.length} clientes en el plan (filtrado).`;
+
+  // Listeners de edición
+  $$('#planTable .edit-dia').forEach(sel => sel.addEventListener('change', onEditChange));
+  $$('#planTable .edit-semana').forEach(sel => sel.addEventListener('change', onEditChange));
+  $$('#planTable .edit-vendedor').forEach(sel => sel.addEventListener('change', onEditChange));
+  $$('#planTable .edit-visitado').forEach(chk => chk.addEventListener('change', onEditChange));
+}
+
+function onEditChange(ev){
+  const tr = ev.target.closest('tr');
+  const id = Number(tr.dataset.id);
+  const row = plan.find(x => x.__id === id);
+  if(!row) return;
+  if(ev.target.classList.contains('edit-dia')) row.dia = ev.target.value;
+  if(ev.target.classList.contains('edit-semana')) row.semana = Number(ev.target.value);
+  if(ev.target.classList.contains('edit-vendedor')) row.vendedor = ev.target.value;
+  if(ev.target.classList.contains('edit-visitado')) row.visitado = ev.target.checked ? 'Sí' : '';
+  applyFiltersAndRender(); // actualiza mapa y tabla
+}
+
+/* ---------- Exportar ---------- */
+$('#btnExportCSV').addEventListener('click', () => {
+  const rows = (filteredPlan.length?filteredPlan:plan);
+  if(!rows.length) return alert('No hay plan para exportar.');
+  const arr = [
+    ['Provincia','Día','Semana','Vendedor','Gestor','Empresa','Razón Social','Lat','Lon','Visitado'],
+    ...rows.map(r => [r.provincia||'', r.dia||'', r.semana||'', r.vendedor||'', r.gestor||'', r.empresa||'', r.razon||'', r.lat||'', r.lon||'', r.visitado||''])
+  ];
+  const csv = arr.map(r => r.map(v => `"${String(v).replaceAll('"','""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'plan_visitas_v1.1.6.csv';
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 200);
+});
+
+$('#btnExportXLSX').addEventListener('click', () => {
+  const rows = (filteredPlan.length?filteredPlan:plan);
+  if(!rows.length) return alert('No hay plan para exportar.');
+  const data = rows.map(r => ({
+    Provincia: r.provincia||'',
+    Día: r.dia||'',
+    Semana: r.semana||'',
+    Vendedor: r.vendedor||'',
+    Gestor: r.gestor||'',
+    Empresa: r.empresa||'',
+    'Razón Social': r.razon||'',
+    Lat: r.lat||'',
+    Lon: r.lon||'',
+    Visitado: r.visitado||''
+  }));
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(data);
+  XLSX.utils.book_append_sheet(wb, ws, 'Ruta');
+  XLSX.writeFile(wb, 'plan_visitas_v1.1.6.xlsx');
+});
+
+/* ---------- Preferencias ---------- */
+$('#btnGuardarPrefs').addEventListener('click', () => {
+  const prefs = {
+    mapCenter: $('#mapCenter').value,
+    mode: $('#mode').value,
+    limit: $('#limitPerDay').value,
+    sabado: $('#chkSabado').checked,
+    mapping: {
+      provincia: $('#map-provincia').value,
+      dia: $('#map-dia').value,
+      semana: $('#map-semana').value,
+      vendedor: $('#map-vendedor').value,
+      gestor: $('#map-gestor').value,
+      cod_empresa: $('#map-codempresa').value,
+      empresa: $('#map-empresa').value,
+      razon: $('#map-razon').value,
+      lat: $('#map-lat').value,
+      lon: $('#map-lon').value,
+    }
+  };
+  localStorage.setItem('planner_prefs', JSON.stringify(prefs));
+  alert('Preferencias guardadas.');
+});
+
+$('#btnCargarPrefs').addEventListener('click', () => {
+  const raw = localStorage.getItem('planner_prefs');
+  if(!raw) return alert('No hay preferencias guardadas.');
+  const p = JSON.parse(raw);
+  $('#mapCenter').value = p.mapCenter || $('#mapCenter').value;
+  $('#mode').value = p.mode || $('#mode').value;
+  $('#limitPerDay').value = p.limit || $('#limitPerDay').value;
+  $('#chkSabado').checked = !!p.sabado;
+  alert('Preferencias cargadas. Si ya tienes datos, revisa el mapeo y pulsa Aplicar.');
+});
+</script>
+
+<!-- Script para control de visibilidad de rutas -->
+<script>
+// Gestiona la visibilidad de las líneas de ruta mediante el checkbox en la barra de herramientas.
+document.addEventListener('DOMContentLoaded', function(){
+  const chk = document.getElementById('chkShowRoutes');
+  if(!chk) return;
+  chk.addEventListener('change', function(){
+    window.showRoutes = chk.checked;
+    const rows = (typeof filteredPlan !== 'undefined' && filteredPlan.length) ? filteredPlan : (typeof plan !== 'undefined' ? plan : []);
+    if(window.showRoutes){
+      if(typeof drawRoutes === 'function' && window.routeLayer) drawRoutes(rows);
+    } else {
+      if(window.routeLayer) routeLayer.clearLayers();
+    }
+    if(typeof updateQualityInfo === 'function') updateQualityInfo(rows);
+  });
+});
+</script>
+
+<!-- Script para recalcular el costo al cambiar el precio por galón -->
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  const costInput = document.getElementById('costPerGallon');
+  const kmGalInput = document.getElementById('kmPerGallon');
+  const handler = function(){
+    const rows = (typeof filteredPlan !== 'undefined' && filteredPlan.length) ? filteredPlan : (typeof plan !== 'undefined' ? plan : []);
+    if(typeof updateQualityInfo === 'function') updateQualityInfo(rows);
+  };
+  [costInput, kmGalInput].forEach(inp => {
+    if(inp){ inp.addEventListener('input', handler); }
+  });
+});
+</script>
+<!-- Script para multi-selección del filtro de vendedores con lista de verificación -->
+<script>
+// Gestiona el componente de selección múltiple de vendedores basado en checkboxes. Este
+// componente sincroniza sus selecciones con el select oculto #fltVendedor, de manera
+// que el resto del código (filtros en cascada y renderizado) sigue funcionando sin cambios.
+document.addEventListener('DOMContentLoaded', function(){
+  const selectVend = document.getElementById('fltVendedor');
+  const multi = document.getElementById('vendorMulti');
+  if(!selectVend || !multi) return;
+  const chipsContainer = multi.querySelector('.selected-chips');
+  const dropdown = multi.querySelector('.dropdown');
+
+  function buildDropdown(){
+    // Construye la lista de checkboxes según las opciones actuales del select
+    dropdown.innerHTML = '';
+    Array.from(selectVend.options).forEach(opt => {
+      if(!opt.value) return; // omitir opción (Todos)
+      const label = document.createElement('label');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = opt.value;
+      checkbox.checked = opt.selected;
+      checkbox.addEventListener('change', () => {
+        opt.selected = checkbox.checked;
+        // Actualiza el estado del filtro y renderiza
+        if(window.filterState){
+          const selectedVals = Array.from(selectVend.selectedOptions).map(o=>o.value).filter(v=>v);
+          window.filterState.vendedor = selectedVals;
+        }
+        // Emite evento de cambio para re-aplicar cascada y filtros
+        const ev = new Event('change', { bubbles:true });
+        selectVend.dispatchEvent(ev);
+        renderSelectedChips();
+      });
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(' ' + opt.textContent));
+      dropdown.appendChild(label);
+    });
+  }
+  function renderSelectedChips(){
+    // Muestra chips de las selecciones actuales
+    chipsContainer.innerHTML = '';
+    const selectedOptions = Array.from(selectVend.selectedOptions).filter(o=>o.value);
+    if(!selectedOptions.length){
+      const span = document.createElement('span');
+      span.className = 'small';
+      span.textContent = '(Todos)';
+      chipsContainer.appendChild(span);
+      return;
+    }
+    selectedOptions.forEach(opt => {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.textContent = opt.textContent;
+      chipsContainer.appendChild(chip);
+    });
+  }
+
+  // Mostrar/ocultar desplegable al hacer clic
+  multi.addEventListener('click', function(e){
+    e.stopPropagation();
+    dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+  });
+  // Cerrar al hacer clic fuera
+  document.addEventListener('click', function(e){
+    if(!multi.contains(e.target)) dropdown.style.display = 'none';
+  });
+
+  // Inicializar después de que se rellene el select (updateFiltersUI llamará a fillSelect)
+  if(typeof window.updateFiltersUI === 'function'){
+    const origUF = window.updateFiltersUI;
+    window.updateFiltersUI = function(){
+      origUF.apply(this, arguments);
+      buildDropdown();
+      renderSelectedChips();
+    };
+  }
+  // También construir después de cascada para actualizar opciones
+  if(typeof window.cascadeOptions === 'function'){
+    const origCascade = window.cascadeOptions;
+    window.cascadeOptions = function(){
+      origCascade.apply(this, arguments);
+      buildDropdown();
+      renderSelectedChips();
+    };
+  }
+});
+</script>
+
+<!-- Script para animación de rutas y control de reproducción -->
+<script>
+// Este script añade una animación sobre el mapa. Al pulsar el botón ▶️/⏸️ se recorre
+// la ruta filtrada (o todo el plan si no hay filtros) punto a punto, moviendo un
+// marcador en el orden definido en la tabla. Se deshabilita cuando hay menos de
+// dos puntos en la vista.
+(function(){
+  let animMarker = null;
+  let animIndex = 0;
+  let animInterval = null;
+  let animPlaying = false;
+  // Actualiza el estado del botón en función del número de puntos
+  function updateAnimateButton(){
+    const btn = document.getElementById('btnAnimate');
+    if(!btn) return;
+    const rows = (typeof filteredPlan !== 'undefined' && filteredPlan.length) ? filteredPlan : (typeof plan !== 'undefined' ? plan : []);
+    btn.disabled = (rows.length < 2);
+  }
+  window.updateAnimateButton = updateAnimateButton;
+
+  document.addEventListener('DOMContentLoaded', function(){
+    const btn = document.getElementById('btnAnimate');
+    if(!btn) return;
+    btn.addEventListener('click', function(){
+      if(animPlaying){
+        // Pausar animación
+        animPlaying = false;
+        btn.textContent = '▶️';
+        if(animInterval) clearInterval(animInterval);
+        return;
+      }
+      const rows = (typeof filteredPlan !== 'undefined' && filteredPlan.length) ? filteredPlan : (typeof plan !== 'undefined' ? plan : []);
+      if(rows.length < 2) return;
+      // Ordenar puntos por identificador para mantener el mismo orden que en la tabla
+      const sorted = rows.slice().sort((a,b) => (a.__id || 0) - (b.__id || 0));
+      const latlngs = sorted.map(r => [r.lat, r.lon]);
+      // Eliminar marcador previo si existe
+      if(animMarker){ animMarker.remove(); animMarker = null; }
+      // Crear marcador de animación (usa icono por defecto)
+      animMarker = L.marker(latlngs[0], {
+        icon: L.icon({
+          iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+          iconSize: [25, 41],
+          iconAnchor: [12, 41]
+        })
+      });
+      animMarker.addTo(map);
+      animIndex = 0;
+      animPlaying = true;
+      btn.textContent = '⏸️';
+      animInterval = setInterval(function(){
+        animIndex++;
+        if(animIndex >= latlngs.length){
+          clearInterval(animInterval);
+          animPlaying = false;
+          btn.textContent = '▶️';
+          return;
+        }
+        animMarker.setLatLng(latlngs[animIndex]);
+      }, 1500);
+    });
+    // Inicializar estado del botón al cargar la página
+    updateAnimateButton();
+  });
+
+  // Envolver applyFiltersAndRender para actualizar el estado del botón después de cada render
+  (function(){
+    const origApply = window.applyFiltersAndRender;
+    window.applyFiltersAndRender = function(){
+      if(typeof origApply === 'function') origApply.apply(this, arguments);
+      try{ updateAnimateButton(); }catch(e){ console.warn(e); }
+    };
+  })();
+})();
+</script>
+
+<script>
+// === v1.1.8: mejoras sin romper nada ===
+(function(){
+  const $ = (q, root=document) => root.querySelector(q);
+  const $$ = (q, root=document) => Array.from(root.querySelectorAll(q));
+  const toRad = d => d*Math.PI/180;
+  const haversine = (a,b)=>{ const R=6371, dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon); const hh=Math.sin(dLat/2)**2+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLon/2)**2; return 2*R*Math.asin(Math.sqrt(hh)); };
+
+  // 1) Asegurar capas (no falla si ya existen)
+  try{
+    if (typeof L !== 'undefined' && typeof map !== 'undefined') {
+      if (typeof markerLayer === 'undefined') { window.markerLayer = L.layerGroup().addTo(map); }
+      if (typeof routeLayer  === 'undefined') { window.routeLayer  = L.layerGroup().addTo(map); }
+    }
+  }catch(e){ console.warn('init layers warn', e); }
+
+  // 2) Quality info en toolbar (si no existe)
+  try{
+    const tb = document.querySelector('.toolbar');
+    if (tb && !document.getElementById('qualityInfo')) {
+      const div = document.createElement('div');
+      div.id = 'qualityInfo';
+      div.className = 'small';
+      div.style.cssText = 'margin-left:10px;color:#0f172a;background:#f1f5f9;border-radius:8px;padding:6px 8px;display:none';
+      const spacer = tb.querySelector('.spacer');
+      tb.insertBefore(div, spacer || null);
+      // Añadir otro div para mostrar el consumo de combustible estimado
+      const divFuel = document.createElement('div');
+      divFuel.id = 'fuelInfo';
+      divFuel.className = 'small';
+      divFuel.style.cssText = 'margin-left:10px;color:#0f172a;background:#f1f5f9;border-radius:8px;padding:6px 8px;display:none';
+      tb.insertBefore(divFuel, spacer || null);
+      // Campo de entrada para el rendimiento en km por galón con etiqueta
+      const labelKmGal = document.createElement('label');
+      labelKmGal.textContent = 'Km/gal:';
+      labelKmGal.style.cssText = 'margin-left:10px;font-size:12px;color:#6b7280;';
+      tb.insertBefore(labelKmGal, spacer || null);
+      const inputKmGal = document.createElement('input');
+      inputKmGal.id = 'kmPerGallon';
+      inputKmGal.type = 'number';
+      inputKmGal.min = '0.1';
+      inputKmGal.step = '0.1';
+      // 10 km/l * 3.78541 l/gal ≈ 37.85 km/gal
+      inputKmGal.value = '37.9';
+      inputKmGal.title = 'Kilómetros por galón';
+      inputKmGal.style.cssText = 'margin-left:4px;width:70px;padding:4px 6px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;';
+      tb.insertBefore(inputKmGal, spacer || null);
+      // Campo de entrada para el costo por galón de combustible con etiqueta
+      const labelCost = document.createElement('label');
+      labelCost.textContent = 'Precio/gal:';
+      labelCost.style.cssText = 'margin-left:10px;font-size:12px;color:#6b7280;';
+      tb.insertBefore(labelCost, spacer || null);
+      const inputCost = document.createElement('input');
+      inputCost.id = 'costPerGallon';
+      inputCost.type = 'number';
+      inputCost.min = '0';
+      inputCost.step = '0.01';
+      inputCost.placeholder = '0';
+      inputCost.style.cssText = 'margin-left:4px;width:70px;padding:4px 6px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;';
+      tb.insertBefore(inputCost, spacer || null);
+      // Div para mostrar el costo estimado total de la ruta
+      const divCost = document.createElement('div');
+      divCost.id = 'costInfo';
+      divCost.className = 'small';
+      divCost.style.cssText = 'margin-left:10px;color:#0f172a;background:#f1f5f9;border-radius:8px;padding:6px 8px;display:none';
+      tb.insertBefore(divCost, spacer || null);
+
+      // Botón para abrir ruta en Google Maps
+      const btnGM = document.createElement('button');
+      btnGM.id = 'btnGoogleMaps';
+      btnGM.textContent = 'Google Maps';
+      btnGM.className = 'btn-ghost';
+      btnGM.style.cssText = 'margin-left:10px;';
+      btnGM.disabled = false;
+      tb.insertBefore(btnGM, spacer || null);
+      // Evento para abrir la ruta seleccionada en Google Maps
+      btnGM.addEventListener('click', () => {
+        try{
+          // Usar filteredPlan si existe, de lo contrario plan
+          const dataset = (typeof filteredPlan !== 'undefined' && filteredPlan.length) ? filteredPlan : plan;
+          // Agrupar por vendedor, semana y día según filtros activos
+          const fs = window.filterState || {};
+          let rowsSel = dataset;
+          // Se requiere seleccionar un solo vendedor para obtener la ruta correcta
+          const selectedVendors = Array.isArray(fs.vendedor) ? fs.vendedor.filter(v=>v) : (fs.vendedor? [fs.vendedor] : []);
+          if(selectedVendors.length !== 1){
+            alert('Selecciona exactamente un vendedor en los filtros para abrir la ruta en Google Maps.');
+            return;
           }
-          // dibujar polilínea para el vendedor/semana
-          const coords = ordered.map(o=>[o.latitud,o.longitud]);
-          if(coords.length>1){ L.polyline(coords, {color: weekColor(week), weight:3, opacity:0.7}).addTo(routesLayer); }
-        }
+          const vend = selectedVendors[0];
+          rowsSel = rowsSel.filter(r => r.vendedor === vend);
+          // Filtrar por semana y día si están definidos (pero pueden ser vacíos)
+          if(fs.semana){ rowsSel = rowsSel.filter(r => String(r.semana) === String(fs.semana)); }
+          if(fs.dia){ rowsSel = rowsSel.filter(r => r.dia === fs.dia); }
+          if(!rowsSel.length){ alert('No hay paradas en la selección actual.'); return; }
+          // Ordenar por __id
+          const ord = rowsSel.slice().sort((a,b) => a.__id - b.__id);
+          // Construir parámetros de Google Maps
+          let waypoints = ord.slice(1, ord.length-1).map(p => `${p.lat},${p.lon}`).join('|');
+          const origin = window.userLocation ? `${window.userLocation.lat},${window.userLocation.lon}` : `${ord[0].lat},${ord[0].lon}`;
+          const destination = `${ord[ord.length-1].lat},${ord[ord.length-1].lon}`;
+          let url = `https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`;
+          if(waypoints){ url += `&waypoints=${encodeURIComponent(waypoints)}`; }
+          window.open(url, '_blank');
+        }catch(err){ console.warn('Error al abrir Google Maps', err); }
       });
-      setStatus('Rutas generadas.'); renderTable(); plotAll();
-    });
+    }
+  }catch(e){ console.warn('quality insert warn', e); }
 
-    document.getElementById('btn-export-csv').addEventListener('click', ()=>{
-      if(!rawData.length) return alert('Carga primero un archivo.');
-      const rows = [['provincia','vendedor','gestor_servicio','Empresa','CodEmpresa','RazonSocial','latitud','longitud','semana','dia']];
-      rawData.forEach(r=>rows.push([r.provincia,r.vendedor,r.gestor_servicio,r.Empresa,r.CodEmpresa,r.RazonSocial,r.latitud,r.longitud,r.semana,r.dia]));
-      const csv = rows.map(r=>r.map(cell=>`"${String(cell||'').replace(/"/g,'""')}"`).join(',')).join('\n');
-      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-      const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='schedule_export.csv'; a.click(); URL.revokeObjectURL(url);
-    });
+  // 3) Algoritmo selector junto a Límite/día (no existe -> crear)
+  try{
+    const limit = document.getElementById('limitPerDay');
+    if (limit && !document.getElementById('algo')){
+      const col = document.createElement('div');
+      col.innerHTML = '<label>Algoritmo</label>\
+        <select id="algo">\
+          <option value="kmeans" selected>k-means por día (recomendado)</option>\
+          <option value="nn">Orden por cercanía (NN)</option>\
+          <option value="polar">Ángulo polar</option>\
+        </select>';
+      const row = limit.closest('.row') || limit.parentElement;
+      if (row) {
+        // Inserta antes del campo Límite/día
+        row.insertBefore(col, limit.parentElement || limit);
+      }
+    }
+  }catch(e){ console.warn('algo insert warn', e); }
 
-    // Filtros rapidos
-    document.getElementById('show-all').addEventListener('click', ()=>{ plotAll(null); });
-    document.getElementById('show-week1').addEventListener('click', ()=>{ plotAll(1); });
-    document.getElementById('show-week2').addEventListener('click', ()=>{ plotAll(2); });
-    document.getElementById('show-week3').addEventListener('click', ()=>{ plotAll(3); });
-    document.getElementById('show-week4').addEventListener('click', ()
+  // 4) Helpers de asignación (una sola vez)
+  function centroid(ps){ if(!ps.length) return {lat:0,lon:0}; let sl=0,so=0; ps.forEach(p=>{sl+=p.lat; so+=p.lon}); return {lat:sl/ps.length, lon:so/ps.length}; }
+  function kmeansGroups(ps,k,iters=6){
+    if(ps.length<=k) return ps.map(p=>[p]);
+    const c0=centroid(ps);
+    const angs=ps.map(p=>({p,a:Math.atan2(p.lat-c0.lat,p.lon-c0.lon)})).sort((a,b)=>a.a-b.a);
+    const step=Math.max(1,Math.floor(angs.length/k));
+    let cents=Array.from({length:k},(_,i)=>({lat:angs[Math.min(i*step,angs.length-1)].p.lat,lon:angs[Math.min(i*step,angs.length-1)].p.lon}));
+    let groups=Array.from({length:k},()=>[]);
+    for(let it=0; it<iters; it++){
+      groups=Array.from({length:k},()=>[]);
+      ps.forEach(p=>{
+        let best=0,bestD=Infinity;
+        for(let i=0;i<cents.length;i++){ const d=haversine(p,cents[i]); if(d<bestD){bestD=d;best=i;} }
+        groups[best].push(p);
+      });
+      cents=groups.map(g=>g.length?centroid(g):cents[Math.floor(Math.random()*cents.length)]);
+    }
+    return groups;
+  }
+  function nearestPath(list){
+    if(list.length<=1) return list.slice();
+    const left=list.slice(); const ordered=[ left.shift() ];
+    while(left.length){
+      let best=0,bestD=Infinity;
+      for(let i=0;i<left.length;i++){ const d=haversine(ordered[ordered.length-1], left[i]); if(d<bestD){bestD=d;best=i;} }
+      ordered.push(left.splice(best,1)[0]);
+    }
+    return ordered;
+  }
+  function polarOrder(list){
+    if(list.length<=1) return list.slice();
+    const c=centroid(list); return list.slice().sort((a,b)=>Math.atan2(a.lat-c.lat,a.lon-c.lon)-Math.atan2(b.lat-c.lat,b.lon-c.lon));
+  }
+
+  // 5) Funciones de rutas y calidad (guardadas)
+  function colorByVendor(name){
+    const colors=['#2563eb','#16a34a','#dc2626','#f59e0b','#7c3aed','#0891b2','#be185d','#10b981','#0ea5e9','#334155','#ef4444','#22c55e'];
+    const idx=Math.abs((name||'').split('').reduce((a,c)=>a+c.charCodeAt(0),0))%colors.length; return colors[idx];
+  }
+  // Distancias calculadas mediante OSRM por grupo (vendor|week|day)
+  let osrmDistances = {};
+  /**
+   * Dibuja rutas utilizando OSRM para obtener rutas reales por carretera.
+   * Agrupa por vendedor, semana y día y solicita la ruta a OSRM para cada grupo.
+   * Si showRoutes está desactivado, sólo limpia la capa.
+   * @param {Array} rows
+   */
+  async function drawRoutes(rows){
+    if (!window.routeLayer || !Array.isArray(rows)) return;
+    if (typeof window.showRoutes !== 'undefined' && !window.showRoutes) {
+      routeLayer.clearLayers();
+      return;
+    }
+    routeLayer.clearLayers();
+    osrmDistances = {};
+    if(!rows.length || typeof L==='undefined') return;
+    const groups = {};
+    rows.forEach(r=>{ const k=(r.vendedor||'Sin vendedor')+'|'+(r.semana||'')+'|'+(r.dia||''); (groups[k]??=[]).push(r); });
+    const groupEntries = Object.entries(groups);
+    // Crear funciones para cada grupo
+    const tasks = groupEntries.map(([key,list]) => {
+      return (async () => {
+        const ord=list.slice().sort((a,b)=>a.__id-b.__id);
+        const vend=list[0].vendedor||'Sin vendedor';
+        // Coordenadas para OSRM: lon,lat;
+        const coordStr = ord.map(p => `${p.lon},${p.lat}`).join(';');
+        let geometryCoords = [];
+        let distanceKm = 0;
+        try{
+          // Request to OSRM public API
+          const resp = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson`);
+          if(resp.ok){
+            const data = await resp.json();
+            if(data.routes && data.routes.length){
+              const geo = data.routes[0].geometry;
+              if(geo && geo.coordinates){
+                // Convert [lon,lat] pairs to [lat,lon]
+                geometryCoords = geo.coordinates.map(c => [c[1], c[0]]);
+              }
+              if(typeof data.routes[0].distance === 'number'){
+                distanceKm = data.routes[0].distance / 1000;
+                osrmDistances[key] = distanceKm;
+              }
+            }
+          }
+        }catch(err){
+          console.warn('OSRM error', err);
+        }
+        // Fallback: straight lines if geometryCoords empty
+        if(!geometryCoords.length){
+          geometryCoords = ord.map(r=>[r.lat,r.lon]);
+          // compute haversine sum for fallback distance
+          let sum=0;
+          for(let i=1;i<ord.length;i++){
+            sum += haversine({lat:ord[i-1].lat,lon:ord[i-1].lon},{lat:ord[i].lat,lon:ord[i].lon});
+          }
+          distanceKm = sum;
+          osrmDistances[key] = distanceKm;
+        }
+        // Conectar ubicación del usuario con la primera coordenada
+        if (window.userLocation && geometryCoords.length) {
+          const start = [window.userLocation.lat, window.userLocation.lon];
+          L.polyline([start, geometryCoords[0]], {
+            color: colorByVendor(vend),
+            weight: 2,
+            opacity: 0.6,
+            dashArray: '4,6'
+          }).addTo(routeLayer);
+        }
+        // Dibujar la ruta real
+        L.polyline(geometryCoords,{color:colorByVendor(vend),weight:4,opacity:0.9}).addTo(routeLayer);
+      })();
+    });
+    // Esperar todas las rutas
+    try{ await Promise.all(tasks); }
+    catch(e){ console.warn('drawRoutes tasks error', e); }
+  }
+  function totalDistanceKm(rows){
+    if(!Array.isArray(rows)) return 0;
+    // Si existen distancias calculadas por OSRM, úsalas
+    let sum = 0;
+    const groups={};
+    rows.forEach(r=>{ const k=(r.vendedor||'Sin vendedor')+'|'+(r.semana||'')+'|'+(r.dia||''); (groups[k]??=[]).push(r); });
+    Object.keys(groups).forEach(key=>{
+      const list = groups[key];
+      const ord=list.slice().sort((a,b)=>a.__id-b.__id);
+      let dkm = 0;
+      if(osrmDistances && typeof osrmDistances[key] === 'number'){
+        dkm = osrmDistances[key];
+      } else {
+        // suma de distancias geodésicas entre paradas
+        for(let i=1;i<ord.length;i++){
+          dkm += haversine({lat:ord[i-1].lat,lon:ord[i-1].lon},{lat:ord[i].lat,lon:ord[i].lon});
+        }
+      }
+      // Añadir distancia desde y hasta la ubicación inicial (si existe) para cada grupo
+      if(window.userLocation && ord.length){
+        const start = {lat: window.userLocation.lat, lon: window.userLocation.lon};
+        dkm += haversine(start, {lat: ord[0].lat, lon: ord[0].lon});
+        dkm += haversine({lat: ord[ord.length-1].lat, lon: ord[ord.length-1].lon}, start);
+      }
+      sum += dkm;
+    });
+    return sum;
+  }
+  function updateQualityInfo(rows){
+    const el = document.getElementById('qualityInfo');
+    const fuelEl = document.getElementById('fuelInfo');
+    const costInput = document.getElementById('costPerGallon');
+    const costEl = document.getElementById('costInfo');
+    if(!el) return;
+    if(!rows || !rows.length){
+      el.style.display='none'; el.textContent='';
+      if(fuelEl){ fuelEl.style.display='none'; fuelEl.textContent=''; }
+      if(costEl){ costEl.style.display='none'; costEl.textContent=''; }
+      return;
+    }
+    const dist = totalDistanceKm(rows);
+    el.style.display='inline-block';
+    el.textContent = 'Dist. total estimada: ' + dist.toFixed(1) + ' km';
+    // Calcular consumo estimado de combustible en galones usando km/galón
+    if(fuelEl){
+      let kmPerGalVal = 37.9;
+      const inpKmGal = document.getElementById('kmPerGallon');
+      if(inpKmGal){
+        const v = parseFloat(inpKmGal.value);
+        if(!isNaN(v) && v > 0){ kmPerGalVal = v; }
+      }
+      const consumption = dist / kmPerGalVal;
+      fuelEl.style.display = 'inline-block';
+      fuelEl.textContent = 'Consumo estimado: ' + consumption.toFixed(2) + ' gal';
+      // Calcular coste si el usuario ha introducido un precio por galón
+      if(costInput && costEl){
+        const price = parseFloat(costInput.value);
+        if(!isNaN(price) && price > 0){
+          const totalCost = consumption * price;
+          costEl.style.display = 'inline-block';
+          costEl.textContent = 'Costo estimado: ' + totalCost.toFixed(2);
+        } else {
+          costEl.style.display = 'none';
+          costEl.textContent = '';
+        }
+      }
+    }
+  }
+
+  // 6) Asignación robusta por algoritmo (sin eliminar tu assignVisits, sólo la envolvemos)
+  if (typeof window.assignVisits === 'function' && !window._origAssignVisits){
+    window._origAssignVisits = window.assignVisits;
+  }
+  function myAssign(rows, algo){
+    const includeSat = document.getElementById('chkSabado')?.checked || false;
+    const limit = Math.max(1, Number(document.getElementById('limitPerDay')?.value || 8));
+    const days = includeSat ? ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'] : ['Lunes','Martes','Miércoles','Jueves','Viernes'];
+    const weeks = [1,2,3,4];
+    // Extender cada fila según su número de visitas mensuales.  Si una fila tiene
+    // la propiedad `visitas` mayor a uno, se replicará tantas veces.  Cada copia
+    // conserva un identificador de origen (`__origId`) para que podamos
+    // distribuirlas posteriormente en distintas semanas.
+    const extended = [];
+    rows.forEach(r => {
+      const count = Math.max(1, Number(r.visitas) || 1);
+      for(let i = 0; i < count; i++){
+        extended.push({
+          ...r,
+          __origId: r.__origId || r.__id,
+          // Asegurar id único para cada copia (importante para filtrado posterior)
+          __id: (r.__id || 0) * 1000 + i
+        });
+      }
+    });
+    // Agrupar por vendedor
+    const byVend = {};
+    extended.forEach(r => {
+      const k = r.vendedor || 'Sin vendedor';
+      (byVend[k] ??= []).push(r);
+    });
+    const result = [];
+
+    for(const [vend, items] of Object.entries(byVend)){
+      let remaining = items.slice();
+      for(const w of weeks){
+        if(!remaining.length) break;
+        const k = Math.min(days.length, remaining.length);
+        const points = remaining.map(r=>({lat:r.lat,lon:r.lon,ref:r}));
+        let dayBuckets=[];
+        if(algo==='kmeans'){
+          dayBuckets = kmeansGroups(points,k).map(g=>g.map(x=>x.ref));
+        }else if(algo==='nn'){
+          const nn = nearestPath(points).map(x=>x.ref);
+          dayBuckets = Array.from({length:k},()=>[]);
+          nn.forEach((r,i)=> dayBuckets[i%k].push(r));
+        }else{
+          const pol = polarOrder(points).map(x=>x.ref);
+          dayBuckets = Array.from({length:k},()=>[]);
+          pol.forEach((r,i)=> dayBuckets[i%k].push(r));
+        }
+        for(let dIdx=0; dIdx<k; dIdx++){
+          const bucket = dayBuckets[dIdx];
+          if(!bucket.length) continue;
+          const ordered = nearestPath(bucket);
+          const take = ordered.slice(0, limit);
+          take.forEach(r=> result.push({...r, semana:weeks[w], dia:days[dIdx]}));
+          const taken = new Set(take.map(x=>x.__id));
+          remaining = remaining.filter(r=> !taken.has(r.__id));
+        }
+      }
+      if(remaining.length){
+        const ord = nearestPath(remaining);
+        let wIdx=0,dIdx=0,cnt=0;
+        for(const r of ord){
+          result.push({...r, semana:weeks[wIdx], dia:days[dIdx]});
+          cnt++;
+          if(cnt>=limit){
+            cnt=0;
+            dIdx=(dIdx+1)%days.length;
+            if(dIdx===0) wIdx=(wIdx+1)%weeks.length;
+          }
+        }
+      }
+    }
+    // Distribuir visitas duplicadas en semanas distintas: agrupar por vendedor y id
+    {
+      const grouped = {};
+      result.forEach((r, idx) => {
+        const vend = r.vendedor || 'Sin vendedor';
+        if(!grouped[vend]) grouped[vend] = {};
+        const id = r.__origId || r.__id;
+        (grouped[vend][id] ??= []).push(idx);
+      });
+      for(const vend in grouped){
+        const groups = grouped[vend];
+        for(const id in groups){
+          const indices = groups[id];
+          const n = indices.length;
+          if(n <= 1) continue;
+          // Determinar semanas objetivo para las visitas duplicadas.
+          let targetWeeks = [];
+          if(n === 2) targetWeeks = [1,3];
+          else if(n === 3) targetWeeks = [1,2,3];
+          else if(n === 4) targetWeeks = [1,2,3,4];
+          else {
+            for(let i=0;i<n;i++){
+              targetWeeks.push(weeks[i % weeks.length]);
+            }
+          }
+          for(let i = 0; i < indices.length; i++){
+            const idxR = indices[i];
+            result[idxR].semana = targetWeeks[i % targetWeeks.length];
+          }
+        }
+      }
+    }
+    return result;
+  }
+  window.assignVisits = function(rows){
+    const algo = document.getElementById('algo')?.value || 'kmeans';
+    try{
+      if (['kmeans','nn','polar'].includes(algo)) return myAssign(rows, algo);
+      if (typeof window._origAssignVisits === 'function') return window._origAssignVisits(rows);
+      return rows;
+    }catch(e){
+      console.error('assign fallback', e);
+      if (typeof window._origAssignVisits === 'function') return window._origAssignVisits(rows);
+      return rows;
+    }
+  };
+
+  // 7) Hook al render para dibujar rutas y calidad sin romper lo existente
+  if (typeof window.applyFiltersAndRender === 'function' && !window._origApply){
+    window._origApply = window.applyFiltersAndRender;
+    window.applyFiltersAndRender = function(){
+      try{ window._origApply(); }catch(e){ console.error(e); }
+      try{
+        const src = (typeof filteredPlan!=='undefined' && filteredPlan.length) ? filteredPlan : (typeof plan!=='undefined' ? plan : []);
+        if (window.routeLayer) drawRoutes(src);
+        updateQualityInfo(src);
+      }catch(e){ console.error('post-render', e); }
+    };
+  }
+
+  console.info('v1.1.8 listo');
+})();
+</script>
+
+
+<script>
+// --- v1.1.8: filtros en cascada + multi Vendedores ---
+(function(){
+  const $ = (q, root=document) => root.querySelector(q);
+  const $$ = (q, root=document) => Array.from(root.querySelectorAll(q));
+
+  function getSelectedMulti(sel){
+    if(!sel) return [];
+    return Array.from(sel.selectedOptions).map(o=>o.value).filter(v=>v!=='');
+  }
+  function setOptions(sel, values, keepSelected=true, withAll=true){
+    if(!sel) return;
+    const prev = keepSelected ? (sel.multiple ? getSelectedMulti(sel) : sel.value) : null;
+    sel.innerHTML='';
+    if(withAll && !sel.multiple){
+      const o = document.createElement('option'); o.value=''; o.textContent='(Todos)'; sel.appendChild(o);
+    }
+    values.forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
+    if(keepSelected){
+      if(sel.multiple && Array.isArray(prev)){
+        Array.from(sel.options).forEach(o=>{ if(prev.includes(o.value)) o.selected = true; });
+      }else if(typeof prev==='string'){
+        const ok = Array.from(sel.options).some(o=>o.value===prev);
+        sel.value = ok ? prev : '';
+      }
+    }
+  }
+
+  // filtro global (extiende el existente si lo hubiera)
+  window.filterState = window.filterState || { vendedor:'', empresa:'', provincia:'', semana:'', dia:'' };
+  // Ahora vendedor puede ser array
+  function readFilters(){
+    const vSel = $('#fltVendedor');
+    const v = vSel && vSel.multiple ? getSelectedMulti(vSel) : ($('#fltVendedor')?.value || '');
+    window.filterState.vendedor = v;
+    window.filterState.empresa  = $('#fltEmpresa')?.value || '';
+    window.filterState.provincia= $('#fltProvincia')?.value || '';
+    window.filterState.semana   = $('#fltSemana')?.value || '';
+    window.filterState.dia      = $('#fltDia')?.value || '';
+  }
+
+  function cascadeOptions(){
+    // usa el dataset actual (plan si existe; si no, mappedRows)
+    const base = (typeof plan!=='undefined' && plan.length) ? plan : (typeof mappedRows!=='undefined' ? mappedRows : []);
+    const fs = window.filterState || {};
+    // 1) por vendedores (multi)
+    let data = base.slice();
+    if(Array.isArray(fs.vendedor) && fs.vendedor.length){
+      data = data.filter(r=> fs.vendedor.includes(r.vendedor));
+    }else if(typeof fs.vendedor==='string' && fs.vendedor){
+      data = data.filter(r=> r.vendedor===fs.vendedor);
+    }
+    // 2) empresas válidas tras vendedores
+    const empresas = Array.from(new Set(data.map(r=>r.empresa).filter(Boolean))).sort((a,b)=>String(a).localeCompare(String(b),'es'));
+    setOptions($('#fltEmpresa'), empresas, true, true);
+    // 3) provincias válidas tras empresa
+    let data2 = data.slice();
+    if(fs.empresa){ data2 = data2.filter(r=> r.empresa===fs.empresa); }
+    const provincias = Array.from(new Set(data2.map(r=>r.provincia).filter(Boolean))).sort((a,b)=>String(a).localeCompare(String(b),'es'));
+    setOptions($('#fltProvincia'), provincias, true, true);
+    // 4) semanas válidas tras provincia
+    let data3 = data2.slice();
+    if(fs.provincia){ data3 = data3.filter(r=> r.provincia===fs.provincia); }
+    const semanas = Array.from(new Set(data3.map(r=> String(r.semana||'')).filter(Boolean))).sort((a,b)=>Number(a)-Number(b));
+    setOptions($('#fltSemana'), semanas, true, true);
+    // 5) días válidos tras semana
+    let data4 = data3.slice();
+    if(fs.semana){ data4 = data4.filter(r=> String(r.semana)===String(fs.semana)); }
+    // Ordenar días según su secuencia natural: Lunes, Martes, Miércoles, Jueves, Viernes, Sábado
+    const orderDays = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+    const dias = Array.from(new Set(data4.map(r=> r.dia).filter(Boolean))).sort((a,b)=> {
+      const ia = orderDays.indexOf(a);
+      const ib = orderDays.indexOf(b);
+      if(ia === -1 && ib === -1) return String(a).localeCompare(String(b),'es');
+      if(ia === -1) return 1;
+      if(ib === -1) return -1;
+      return ia - ib;
+    });
+    setOptions($('#fltDia'), dias, true, true);
+  }
+
+  // Hookear cambios
+  ['fltVendedor','fltEmpresa','fltProvincia','fltSemana','fltDia'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('change', ()=>{ readFilters(); if(typeof applyFiltersAndRender==='function'){ cascadeOptions(); applyFiltersAndRender(); } });
+  });
+
+  // Al cargar o tras generar plan, recalcular cascada
+  const origUpdate = window.updateFiltersUI;
+  window.updateFiltersUI = function(){
+    if(typeof origUpdate === 'function'){ origUpdate(); }
+    // hacer multi-select en vendedores y cargar opciones
+    const vSel = document.getElementById('fltVendedor');
+    if(vSel){ vSel.multiple = true; }
+    readFilters();
+    cascadeOptions();
+  };
+
+  // Integrar en render
+  const origApply = window.applyFiltersAndRender;
+  if(typeof origApply==='function'){
+    window.applyFiltersAndRender = function(){
+      if(typeof origApply==='function'){ origApply(); }
+      // re-aplicar cascada tras render para mantener consistencia
+      cascadeOptions();
+    };
+  }
+
+  console.info('v1.1.8 filtros en cascada + multi vendedores listo');
+})();
+</script>
+
+</body>
+</html>
