@@ -1,191 +1,541 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mapa Mental Radial</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mapa Mental Radial · Programa Comercial</title>
 <style>
-  body {
-    font-family: "Poppins", sans-serif;
-    margin: 0;
-    background: #ffffff;
-    color: #333;
-    overflow-x: hidden;
+  :root{
+    --primary:#E30613;
+    --accent:#FFD700;
+    --bg:#ffffff;
+    --muted:#f5f5f7;
+    --text:#2b2b2b;
   }
-  header {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    background: #E30613;
-    color: white;
-    text-align: center;
-    padding: 10px;
-    z-index: 1000;
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Poppins, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    overflow-x:hidden;
   }
-  header div[contenteditable] {
-    font-size: 14px;
-    font-weight: bold;
-    cursor: text;
+
+  /* Encabezado (logo + título) */
+  header{
+    position:fixed; top:0; left:0; right:0; z-index:1000;
+    background:var(--primary); color:#fff; text-align:center; padding:10px 12px;
+    box-shadow:0 2px 0 #00000014;
   }
-  header h1[contenteditable] {
-    font-size: 22px;
-    margin: 5px 0;
-    cursor: text;
+  header .logo-slot[contenteditable]{font-weight:700; font-size:14px; outline:none;}
+  header h1[contenteditable]{margin:6px 0 2px; font-size:22px; line-height:1.2; outline:none; cursor:text;}
+  header small[contenteditable]{display:block; opacity:.9; outline:none;}
+
+  /* Barra de herramientas */
+  .toolbar{
+    position:fixed; top:86px; left:0; right:0; z-index:999;
+    background:#fafafa; border-bottom:2px solid var(--primary);
+    display:flex; gap:8px; align-items:center; justify-content:center; padding:10px;
   }
-  .toolbar {
-    position: fixed;
-    top: 70px;
-    width: 100%;
-    background: #f8f8f8;
-    border-bottom: 2px solid #E30613;
-    text-align: center;
-    z-index: 999;
-    padding: 10px 0;
+  .btn{
+    appearance:none; border:none; border-radius:8px;
+    padding:8px 14px; background:var(--primary); color:#fff; font-weight:700; cursor:pointer;
   }
-  .toolbar button {
-    background: #E30613;
-    color: white;
-    border: none;
-    margin: 0 5px;
-    padding: 8px 14px;
-    border-radius: 5px;
-    cursor: pointer;
-    font-weight: bold;
+  .btn.secondary{ background:#ececf0; color:#222; border:1px solid #ddd; }
+  .btn:hover{ filter:brightness(.92) }
+
+  /* Lienzo principal con mapa RD de fondo */
+  main{
+    position:relative; z-index:1;
+    margin-top:150px; /* header + toolbar */
+    min-height:calc(100vh - 150px);
+    padding:24px 16px 48px;
+    display:flex; align-items:center; justify-content:center;
   }
-  .toolbar button:hover {
-    background: #b5040f;
+  .stage{
+    position:relative; width:min(1200px,95vw); height:min(680px,78vh);
+    border:1px solid #eee; border-radius:16px; background:#fff;
+    box-shadow:0 12px 28px rgba(0,0,0,.06), 0 2px 6px rgba(0,0,0,.04);
+    overflow:hidden;
   }
-  main {
-    margin-top: 140px;
-    text-align: center;
-    min-height: 85vh;
-    position: relative;
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" opacity="0.08"><path d="M450 300 m-200 0 a200,200 0 1,1 400,0 a200,200 0 1,1 -400,0" fill="none" stroke="%23E30613" stroke-width="2"/><path d="M450 100 L450 80 M450 500 L450 520 M250 300 L230 300 M650 300 L670 300" stroke="%23FFD700" stroke-width="4" stroke-linecap="round"/></svg>');
-    background-repeat: no-repeat;
-    background-position: center bottom;
+
+  /* Mapa RD centrado y semitransparente detrás */
+  .rd-map{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    opacity:.28; transition:opacity .25s ease;
+    pointer-events:none; /* no bloquea clic */
   }
-  .node {
-    display: inline-block;
-    background: #fff;
-    border: 2px solid #E30613;
-    border-radius: 50%;
-    width: 130px;
-    height: 130px;
-    line-height: 130px;
-    text-align: center;
-    margin: 15px;
-    font-weight: 600;
-    color: #E30613;
-    transition: all 0.3s ease;
-    cursor: text;
+  .rd-map.hidden{ opacity:0; }
+  .rd-map svg{ max-width:90%; max-height:90%; }
+
+  /* Capa radial */
+  .radial{
+    position:absolute; inset:0; display:block;
   }
-  .node:hover { transform: scale(1.1); background: #fff5f5; }
-  #panel {
-    display: none;
-    position: fixed;
-    right: 0;
-    top: 130px;
-    width: 320px;
-    height: calc(100% - 130px);
-    background: white;
-    border-left: 3px solid #E30613;
-    overflow: auto;
-    padding: 15px;
-    z-index: 100;
+  .center-node{
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:160px; height:160px; border-radius:50%; border:3px solid var(--primary); background:#fff;
+    display:flex; align-items:center; justify-content:center; text-align:center; padding:14px;
+    color:var(--primary); font-weight:800; box-shadow:0 8px 18px #00000010;
   }
-  footer {
-    background: #E30613;
-    color: white;
-    text-align: center;
-    padding: 10px;
-    font-size: 14px;
+  .center-node[contenteditable]{outline:none; cursor:text;}
+
+  .node{
+    position:absolute; width:140px; height:140px; border-radius:50%;
+    border:2px solid var(--primary); background:#fff; color:var(--primary);
+    display:flex; align-items:center; justify-content:center; text-align:center; padding:12px;
+    font-weight:700; transition:transform .2s ease, box-shadow .2s ease, background .2s ease;
+    box-shadow:0 6px 12px #00000010; cursor:text;
   }
-  .watermark {
-    position: absolute;
-    bottom: 30px;
-    right: 30px;
-    opacity: 0.15;
-    font-size: 16px;
-    color: #E30613;
-    font-weight: 600;
+  .node:hover{ transform:scale(1.06); background:#fff7f7; }
+  .node[contenteditable]{outline:none;}
+
+  /* Conexiones */
+  .links{ position:absolute; inset:0; pointer-events:none; }
+  .links line{
+    stroke:var(--primary); stroke-width:2.5; stroke-linecap:round; opacity:.8;
+  }
+
+  /* Panel lateral (Indicadores / Incentivos / Zonas / Provincias) */
+  .sidepanel{
+    position:fixed; top:150px; right:0; width:min(360px,92vw);
+    height:calc(100vh - 150px); background:#fff; border-left:3px solid var(--primary);
+    box-shadow:-12px 0 24px rgba(0,0,0,.06); padding:14px; overflow:auto; z-index:998; display:none;
+  }
+  .sidepanel.open{ display:block; }
+  .sidepanel h3{ margin:8px 0 10px; color:var(--primary); }
+  .sidepanel .note[contenteditable]{white-space:pre-wrap; border:1px dashed #ddd; border-radius:8px; padding:8px; outline:none; min-height:120px;}
+
+  /* Checklist provincias */
+  .prov-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 12px; }
+  .prov-item{ display:flex; align-items:center; gap:8px; font-size:.95rem; }
+  .prov-item input{ width:18px; height:18px; }
+
+  /* Pie */
+  footer{
+    margin-top:8px; background:var(--primary); color:#fff; text-align:center; padding:10px; font-size:14px;
+  }
+  footer[contenteditable]{outline:none;}
+
+  /* Editor de código */
+  .code-modal{
+    position:fixed; inset:0; background:rgba(0,0,0,.5);
+    display:none; align-items:center; justify-content:center; z-index:1200;
+  }
+  .code-modal.open{ display:flex; }
+  .code-box{
+    width:min(1200px,96vw); height:min(680px,88vh); background:#0f172a; color:#e2e8f0;
+    border-radius:12px; box-shadow:0 24px 48px rgba(0,0,0,.35); overflow:hidden; display:flex; flex-direction:column;
+  }
+  .code-head{
+    display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; background:#111827;
+    color:#f1f5f9; font-weight:700;
+  }
+  .code-actions .btn{ padding:6px 12px; border-radius:6px; }
+  .code-area{
+    flex:1; padding:10px; overflow:auto;
+  }
+  textarea.code{
+    width:100%; height:100%; resize:none; border:none; outline:none; background:#0f172a; color:#e2e8f0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size:13px; line-height:1.5; tab-size:2;
+  }
+
+  /* Impresión */
+  @media print{
+    header, .toolbar, .sidepanel, .code-modal{ display:none !important; }
+    main{ margin-top:0 !important; }
+    .stage{ border:none; box-shadow:none; }
   }
 </style>
 </head>
 <body>
 
 <header>
-  <div contenteditable="true">Inserte aquí el logotipo</div>
+  <div class="logo-slot" contenteditable="true">Inserte aquí el logotipo</div>
   <h1 contenteditable="true">Escriba título del programa aquí</h1>
+  <small contenteditable="true">Subtítulo editable — Estrategia de captación y expansión nacional</small>
 </header>
 
+<!-- Barra superior fija -->
 <div class="toolbar">
-  <button onclick="exportToWord()">💾 Guardar</button>
-  <button onclick="window.print()">🖨️ Imprimir</button>
-  <button onclick="togglePanel('Indicadores')">📈 Indicadores</button>
-  <button onclick="togglePanel('Incentivos')">💰 Incentivos</button>
-  <button onclick="togglePanel('Zonas')">📍 Zonas</button>
+  <button class="btn" id="btnSave">💾 Guardar (Word)</button>
+  <button class="btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
+  <button class="btn secondary" data-panel="indicadores">📈 Indicadores</button>
+  <button class="btn secondary" data-panel="incentivos">💰 Incentivos</button>
+  <button class="btn secondary" data-panel="zonas">📍 Zonas</button>
+  <button class="btn secondary" id="btnProvincias">🗺️ Provincias</button>
+  <button class="btn" id="btnToggleMap">🌎 Mostrar/Ocultar mapa</button>
+  <button class="btn" id="btnEditCode">🧩 Editar código</button>
 </div>
 
-<main id="mapa">
-  <div class="node" contenteditable="true">Objetivo</div>
-  <div class="node" contenteditable="true">Estructura</div>
-  <div class="node" contenteditable="true">Logística</div>
-  <div class="node" contenteditable="true">Incentivos</div>
-  <div class="node" contenteditable="true">Seguimiento</div>
-  <div class="node" contenteditable="true">Beneficios</div>
-  <p style="margin-top:50px; opacity:0.6;" contenteditable="true">
-    Crecimiento y presencia en toda la República Dominicana
-  </p>
-  <div class="watermark" contenteditable="true">
-    Mapa interactivo corporativo – editable
+<main>
+  <div class="stage" id="stage">
+    <!-- Mapa RD (SVG) centrado y semitransparente -->
+    <div class="rd-map" id="rdMap">
+      <!-- RD Silhouette SVG (simplificado) -->
+      <svg viewBox="0 0 1200 700" aria-hidden="true">
+        <defs>
+          <linearGradient id="rdGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#E30613"/>
+            <stop offset="1" stop-color="#FFD700"/>
+          </linearGradient>
+        </defs>
+        <!-- Silueta aproximada RD (vector simplificado para fondo) -->
+        <path d="M160,420 C200,360 270,340 340,330 C410,320 460,300 520,280
+                 C560,270 620,270 690,300 C760,330 820,360 880,360
+                 C910,360 930,370 950,400 C970,430 970,470 940,490
+                 C900,520 840,540 800,550 C760,560 720,560 680,560
+                 C620,560 560,540 510,530 C460,520 410,510 350,500
+                 C290,490 240,480 200,460 C170,450 150,440 160,420 Z"
+              fill="url(#rdGrad)" opacity="0.35"/>
+      </svg>
+    </div>
+
+    <!-- Conexiones SVG -->
+    <svg class="links" id="links" xmlns="http://www.w3.org/2000/svg"></svg>
+
+    <!-- Centro y nodos radiales -->
+    <div class="center-node" id="center" contenteditable="true">
+      Programa Nacional de Captación
+    </div>
+
+    <!-- Nodos (se posicionan radialmente por JS) -->
+    <div class="node" data-index="0" contenteditable="true">Objetivo</div>
+    <div class="node" data-index="1" contenteditable="true">Estructura</div>
+    <div class="node" data-index="2" contenteditable="true">Logística</div>
+    <div class="node" data-index="3" contenteditable="true">Incentivos</div>
+    <div class="node" data-index="4" contenteditable="true">Seguimiento</div>
+    <div class="node" data-index="5" contenteditable="true">Beneficios</div>
   </div>
 </main>
 
-<div id="panel">
-  <h3 id="panel-title"></h3>
-  <div id="panel-content" contenteditable="true" style="white-space:pre-wrap; font-size:14px;"></div>
-</div>
+<!-- Panel lateral genérico -->
+<aside class="sidepanel" id="panel">
+  <h3 id="panelTitle">Panel</h3>
+  <div class="note" id="panelNote" contenteditable="true">Escriba aquí la información del panel seleccionado.</div>
+</aside>
+
+<!-- Panel Provincias -->
+<aside class="sidepanel" id="panelProvincias">
+  <h3>Provincias de la República Dominicana</h3>
+  <div class="prov-grid" id="provGrid">
+    <!-- Provincias (checklist) -->
+  </div>
+  <hr>
+  <div class="note" contenteditable="true">
+    Observaciones por provincia (editable). Marque una o varias provincias para resaltarlas sobre el mapa y registrar notas de estrategia regional.
+  </div>
+</aside>
 
 <footer contenteditable="true">
-  Escriba aquí el pie de página o lema corporativo.
+  Frase corporativa editable — “Creciendo en toda la República Dominicana”.
 </footer>
 
+<!-- Modal Editor de Código -->
+<div class="code-modal" id="codeModal" role="dialog" aria-modal="true">
+  <div class="code-box">
+    <div class="code-head">
+      <div>🧩 Editor de código — HTML completo</div>
+      <div class="code-actions">
+        <button class="btn secondary" id="btnCancelEdit">❌ Cancelar</button>
+        <button class="btn" id="btnApplyEdit">💾 Guardar cambios</button>
+      </div>
+    </div>
+    <div class="code-area">
+      <textarea class="code" id="codeArea" spellcheck="false"></textarea>
+    </div>
+  </div>
+</div>
+
 <script>
-function togglePanel(tipo) {
-  const panel = document.getElementById("panel");
-  const title = document.getElementById("panel-title");
-  const content = document.getElementById("panel-content");
-  if (panel.style.display === "block" && title.textContent === tipo) {
-    panel.style.display = "none";
+/* ---------------------------
+   Utilidades DOM
+----------------------------*/
+const $ = (s, r=document)=> r.querySelector(s);
+const $$ = (s, r=document)=> Array.from(r.querySelectorAll(s));
+
+/* ---------------------------
+   Provincias (lista + centroides aproximados para resaltar)
+   Nota: coordenadas relativas al contenedor .stage (0..1)
+----------------------------*/
+const PROVINCIAS = [
+  { id:"DN", name:"Distrito Nacional", x:.58, y:.48 },
+  { id:"SDE", name:"Santo Domingo Este", x:.63, y:.49 },
+  { id:"SDO", name:"Santo Domingo Oeste", x:.55, y:.50 },
+  { id:"SDN", name:"Santo Domingo Norte", x:.59, y:.45 },
+  { id:"LA", name:"La Altagracia", x:.84, y:.45 },
+  { id:"LR", name:"La Romana", x:.78, y:.50 },
+  { id:"HE", name:"Higüey (prov. La Altagracia)", x:.845, y:.47 },
+  { id:"SPM", name:"San Pedro de Macorís", x:.71, y:.53 },
+  { id:"SE", name:"El Seibo", x:.80, y:.46 },
+  { id:"HATO", name:"Hato Mayor", x:.73, y:.47 },
+  { id:"SC", name:"San Cristóbal", x:.51, y:.57 },
+  { id:"PR", name:"Peravia", x:.47, y:.62 },
+  { id:"AZ", name:"Azua", x:.40, y:.67 },
+  { id:"BR", name:"Barahona", x:.30, y:.70 },
+  { id:"BAH", name:"Bahoruco", x:.28, y:.63 },
+  { id:"IN", name:"Independencia", x:.22, y:.62 },
+  { id:"PD", name:"Pedernales", x:.16, y:.72 },
+  { id:"SEY", name:"Samaná", x:.75, y:.37 },
+  { id:"MT", name:"Monte Plata", x:.63, y:.43 },
+  { id:"DU", name:"Duarte", x:.66, y:.36 },
+  { id:"ES", name:"Espaillat", x:.58, y:.33 },
+  { id:"PP", name:"Puerto Plata", x:.54, y:.28 },
+  { id:"ST", name:"Santiago", x:.52, y:.35 },
+  { id:"STO", name:"Santiago Rodríguez", x:.41, y:.35 },
+  { id:"VA", name:"Valverde", x:.45, y:.33 },
+  { id:"MO", name:"Monseñor Nouel", x:.56, y:.41 },
+  { id:"HG", name:"Hermanas Mirabal", x:.62, y:.38 },
+  { id:"LB", name:"La Vega", x:.55, y:.44 },
+  { id:"SP", name:"San Pedro (duplicado ej.)", x:.69, y:.52 },
+  { id:"SJ", name:"San Juan", x:.33, y:.58 },
+  { id:"EP", name:"Elías Piña", x:.26, y:.54 },
+  { id:"MOCA", name:"Moca (prov. Espaillat)", x:.59, y:.35 },
+  { id:"CO", name:"Cotui (prov. Sánchez Ramírez)", x:.61, y:.41 },
+  { id:"SR", name:"Sánchez Ramírez", x:.60, y:.40 },
+  { id:"MN", name:"Monte Cristi", x:.36, y:.29 }
+];
+
+/* ---------------------------
+   Construir checklist provincias
+----------------------------*/
+const provGrid = $("#provGrid");
+function buildProvincias(){
+  provGrid.innerHTML = PROVINCIAS.map(p=>{
+    return `<label class="prov-item">
+      <input type="checkbox" data-prov="${p.id}">
+      <span>${p.name}</span>
+    </label>`;
+  }).join("");
+}
+buildProvincias();
+
+/* ---------------------------
+   Dibujo de resaltado de provincias (círculos suaves)
+----------------------------*/
+const stage = $("#stage");
+const links = $("#links");
+const rdMap = $("#rdMap");
+
+let highlightLayer = null;
+function ensureHighlightLayer(){
+  if(!highlightLayer){
+    highlightLayer = document.createElementNS("http://www.w3.org/2000/svg","svg");
+    highlightLayer.setAttribute("class","links");
+    highlightLayer.style.pointerEvents = "none";
+    stage.appendChild(highlightLayer);
+  }
+  return highlightLayer;
+}
+
+function redrawHighlights(){
+  const svg = ensureHighlightLayer();
+  svg.innerHTML = ""; // limpiar
+  const r = stage.getBoundingClientRect();
+  $$('input[data-prov]').forEach(ch=>{
+    if(ch.checked){
+      const p = PROVINCIAS.find(x=> x.id===ch.dataset.prov);
+      if(!p) return;
+      // dibujar círculo translúcido y borde
+      const cx = p.x * r.width, cy = p.y * r.height;
+      const cir = document.createElementNS("http://www.w3.org/2000/svg","circle");
+      cir.setAttribute("cx", cx);
+      cir.setAttribute("cy", cy);
+      cir.setAttribute("r", 36);
+      cir.setAttribute("fill", "rgba(227,6,19,0.18)");
+      cir.setAttribute("stroke", "rgba(227,6,19,0.85)");
+      cir.setAttribute("stroke-width", "2");
+      svg.appendChild(cir);
+    }
+  });
+}
+
+/* ---------------------------
+   Posicionamiento radial de nodos + conexiones
+----------------------------*/
+const center = $("#center");
+const nodes = $$(".node");
+
+function layoutRadial(){
+  const rect = stage.getBoundingClientRect();
+  const cx = rect.width/2, cy = rect.height/2;
+  // radio para ubicar nodos
+  const R = Math.min(rect.width, rect.height)/2 - 120;
+  const count = nodes.length;
+  links.setAttribute("viewBox", `0 0 ${rect.width} ${rect.height}`);
+  links.setAttribute("width", rect.width);
+  links.setAttribute("height", rect.height);
+  links.innerHTML = "";
+
+  nodes.forEach((el, i)=>{
+    const angle = (i / count) * Math.PI * 2 - Math.PI/2; // iniciar arriba
+    const nx = cx + R * Math.cos(angle);
+    const ny = cy + R * Math.sin(angle);
+    el.style.left = (nx - el.offsetWidth/2) + "px";
+    el.style.top  = (ny - el.offsetHeight/2) + "px";
+
+    // conexión
+    const line = document.createElementNS("http://www.w3.org/2000/svg","line");
+    line.setAttribute("x1", cx);
+    line.setAttribute("y1", cy);
+    line.setAttribute("x2", nx);
+    line.setAttribute("y2", ny);
+    links.appendChild(line);
+  });
+
+  redrawHighlights();
+}
+
+window.addEventListener("resize", layoutRadial);
+window.addEventListener("load", ()=> setTimeout(layoutRadial, 50));
+
+/* ---------------------------
+   Paneles laterales (indicadores / incentivos / zonas)
+----------------------------*/
+const panel = $("#panel");
+const panelTitle = $("#panelTitle");
+const panelNote = $("#panelNote");
+
+$$(".toolbar [data-panel]").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    const which = btn.getAttribute("data-panel");
+    panelTitle.textContent = which.charAt(0).toUpperCase()+which.slice(1);
+    panel.classList.add("open");
+  });
+});
+panel.addEventListener("click", (ev)=>{
+  // cerrar si clic fuera de contenidos? (opcional)
+});
+
+/* ---------------------------
+   Panel Provincias
+----------------------------*/
+const panelProvincias = $("#panelProvincias");
+$("#btnProvincias").addEventListener("click", ()=>{
+  panel.classList.remove("open");
+  panelProvincias.classList.toggle("open");
+});
+provGrid.addEventListener("change", redrawHighlights);
+
+/* ---------------------------
+   Mostrar / Ocultar mapa RD
+----------------------------*/
+const btnToggleMap = $("#btnToggleMap");
+let mapVisible = true;
+btnToggleMap.addEventListener("click", ()=>{
+  mapVisible = !mapVisible;
+  rdMap.classList.toggle("hidden", !mapVisible);
+});
+
+/* ---------------------------
+   Exportar a Word (encabezado en cada página via estilos @page simples)
+----------------------------*/
+$("#btnSave").addEventListener("click", ()=>{
+  // Clonar HTML a exportar
+  const exportHtml = `
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  @page { margin: 20mm; }
+  body { font-family: Poppins, Arial, sans-serif; color:#222; }
+  header, footer { text-align:center; color:${getComputedStyle(document.documentElement).getPropertyValue('--primary')||'#E30613'}; }
+  h1 { color:${getComputedStyle(document.documentElement).getPropertyValue('--primary')||'#E30613'}; }
+  .center-node, .node {
+    display:inline-block; border:2px solid ${getComputedStyle(document.documentElement).getPropertyValue('--primary')||'#E30613'};
+    border-radius:50%; color:${getComputedStyle(document.documentElement).getPropertyValue('--primary')||'#E30613'};
+    text-align:center; font-weight:700;
+  }
+  .center-node{ width:140px; height:140px; line-height:140px; }
+  .node{ width:120px; height:120px; line-height:120px; margin:6px; }
+  .rd{
+    width:100%; max-height:300px; opacity:.3; margin:8px 0 14px;
+  }
+  .tag{ display:inline-block; padding:2px 8px; border:1px solid #ddd; border-radius:999px; font-size:12px; margin:2px; }
+  header .small{ font-size:12px; opacity:.85; }
+</style></head>
+<body>
+<header>
+  <div><strong>${$('.logo-slot').innerHTML}</strong></div>
+  <h1>${$('header h1').innerHTML}</h1>
+  <div class="small">${$('header small').innerHTML}</div>
+</header>
+
+<section>
+  <img class="rd" alt="Mapa RD" src="${makeRDDataURL()}">
+  <div style="text-align:center; margin:10px 0 16px;">
+    <span class="tag">Provincias seleccionadas:</span>
+    ${ $$('input[data-prov]:checked').map(ch=> `<span class="tag">${ch.parentElement.textContent.trim()}</span>`).join('') || '<span class="tag">Ninguna</span>' }
+  </div>
+  <div style="text-align:center;">
+    <span class="center-node">${$('#center').innerText.trim()}</span>
+    <div style="margin-top:10px;">
+      ${ $$('.node').map(n=> `<span class="node">${n.innerText.trim()}</span>`).join('') }
+    </div>
+  </div>
+</section>
+
+<section>
+  <h3 style="color:${getComputedStyle(document.documentElement).getPropertyValue('--primary')||'#E30613'}">Notas generales</h3>
+  <div>${panelNote.innerHTML}</div>
+</section>
+
+<footer>
+  <div>${$('footer').innerHTML}</div>
+</footer>
+</body></html>`;
+
+  const blob = new Blob([exportHtml], {type:"application/msword"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "Mapa_Mental_Radial.doc";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+/* Render RD SVG actual a DataURL (simple rasterizado rápido) */
+function makeRDDataURL(){
+  // Tomamos el path del SVG de fondo y lo dibujamos en canvas para exportarlo
+  const svg = rdMap.querySelector('svg').cloneNode(true);
+  const xml = new XMLSerializer().serializeToString(svg);
+  const svg64 = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+  return svg64; // suficiente para Word como imagen embebida
+}
+
+/* ---------------------------
+   Editor de código (HTML completo)
+----------------------------*/
+const codeModal = $("#codeModal");
+const codeArea  = $("#codeArea");
+$("#btnEditCode").addEventListener("click", ()=>{
+  // Cargar HTML completo actual (outerHTML)
+  const fullHtml = document.documentElement.outerHTML;
+  codeArea.value = "<!-- EDITA CON CUIDADO: esto reemplazará TODO el documento -->\n" + fullHtml;
+  codeModal.classList.add("open");
+});
+
+$("#btnCancelEdit").addEventListener("click", ()=>{
+  codeModal.classList.remove("open");
+  codeArea.value = "";
+});
+
+$("#btnApplyEdit").addEventListener("click", ()=>{
+  if(!confirm("Esta acción reemplaza TODO el documento. ¿Deseas continuar?")){
     return;
   }
-  title.textContent = tipo;
-  content.textContent = "Escriba aquí la información de " + tipo + ".";
-  panel.style.display = "block";
-}
+  const newHtml = codeArea.value;
+  // Reemplazar el documento completo
+  document.open();
+  document.write(newHtml);
+  document.close();
+});
 
-function exportToWord() {
-  const header = document.querySelector("header").innerHTML;
-  const content = document.querySelector("main").innerHTML;
-  const footer = document.querySelector("footer").innerHTML;
-  const full = `
-  <!DOCTYPE html>
-  <html><head><meta charset="utf-8"><style>
-  header, footer { text-align:center; color:#E30613; font-family:Poppins; }
-  h1 { color:#E30613; }
-  .node { display:inline-block; border:2px solid #E30613; border-radius:50%; width:120px; height:120px;
-  text-align:center; line-height:120px; color:#E30613; margin:8px; font-weight:600; }
-  </style></head><body>
-  <header>${header}</header><main>${content}</main><footer>${footer}</footer></body></html>`;
-  const blob = new Blob([full], {type: "application/msword"});
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = "Mapa_Mental_Radial.doc";
-  link.click();
-}
+/* ---------------------------
+   Inicialización
+----------------------------*/
+document.addEventListener("DOMContentLoaded", ()=>{
+  layoutRadial();
+});
 </script>
-
 </body>
 </html>
 
