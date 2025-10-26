@@ -5,7 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Gestión de Llamadas - LLAMADAS v1.5.7</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="">
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
+</script>
   <style>
     :root{ --bg:#0b1220; --card:#131c2b; --muted:#90a0b7; --text:#e8eef9; --primary:#2dd4bf; --danger:#ef4444; --chip:#1f2a40;}
     *{box-sizing:border-box;} body{ margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:linear-gradient(180deg,#0b1220 0%,#0e1626 100%); color:var(--text);}
@@ -177,6 +181,27 @@ body.show-resumen #screenResumenSem > .card {
   margin: 12px auto;
   max-height: 90vh;
   overflow: auto;
+}
+</style>
+
+
+<style id="multiselect-css">
+/* ====== MultiSelect (checkbox) minimal styles ====== */
+.msel-wrap{position:relative}
+.msel-btn{width:100%; padding:10px; border-radius:10px; border:1px solid #d7dde8; background:#fff; color:var(--text); text-align:left; cursor:pointer}
+.msel-btn:after{content:"▾"; float:right; opacity:.6}
+.msel-panel{position:absolute; left:0; right:0; z-index:9999; background:#fff; border:1px solid #d7dde8; border-radius:10px; margin-top:4px; padding:6px; max-height:220px; overflow:auto; box-shadow:0 8px 20px rgba(0,0,0,.08); display:none}
+.msel-row{display:flex; align-items:center; gap:8px; padding:6px 4px; border-radius:8px}
+.msel-row:hover{background:#f4f7fb}
+.msel-search{width:100%; padding:8px; border:1px solid #e1e7f0; border-radius:8px; margin:4px 0 6px 0}
+.msel-pill{display:inline-flex; align-items:center; gap:6px; background:var(--chip,#eef2f7); border:1px solid #e2e8f0; color:#475569; border-radius:999px; padding:2px 8px; font-size:12px}
+/* dark theme fallback */
+@media (prefers-color-scheme: dark) {
+  .msel-btn{background:#0f1726; border:1px solid #314463; color:var(--text)}
+  .msel-panel{background:#0f1726; border:1px solid #314463; color:var(--text)}
+  .msel-row:hover{background:#101a2e}
+  .msel-search{background:#0f1726; border:1px solid #2c3d5d; color:var(--text)}
+  .msel-pill{background:#1f2a40; border:1px solid #2a3a59; color:#a7b3c8}
 }
 </style>
 
@@ -625,6 +650,111 @@ const STATE = {
 };
 
 // ======================= UTILS =======================
+
+// ====== MultiSelect (checkbox) helpers ======
+const MSEL = { values: {} };
+
+function enhanceMultiSelect(selectId, placeholder='Todos'){
+  const sel = document.getElementById(selectId);
+  if(!sel || sel.dataset.msel === '1') return;
+  sel.dataset.msel = '1';
+  sel.style.display = 'none';
+
+  // wrapper
+  const wrap = document.createElement('div');
+  wrap.className = 'msel-wrap';
+  sel.parentNode.insertBefore(wrap, sel);
+  wrap.appendChild(sel);
+
+  // button
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'msel-btn';
+  btn.id = selectId + '_btn';
+  wrap.insertBefore(btn, sel);
+  btn.textContent = placeholder;
+
+  // panel
+  const panel = document.createElement('div');
+  panel.className = 'msel-panel';
+  panel.id = selectId + '_panel';
+  wrap.appendChild(panel);
+
+  // search
+  const search = document.createElement('input');
+  search.type = 'text';
+  search.className = 'msel-search';
+  search.placeholder = 'Buscar...';
+  panel.appendChild(search);
+
+  // options container
+  const optWrap = document.createElement('div');
+  panel.appendChild(optWrap);
+
+  function rebuild(){
+    optWrap.innerHTML = '';
+    const q = (search.value || '').toLowerCase();
+    const opts = Array.from(sel.options);
+    opts.forEach(o=>{
+      if(o.value === '') return; // omit the "Todos" vacío
+      if(q && !String(o.text).toLowerCase().includes(q)) return;
+      const row = document.createElement('label');
+      row.className = 'msel-row';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = o.value;
+      cb.checked = (MSEL.values[selectId] || new Set()).has(o.value);
+      const txt = document.createElement('span');
+      txt.textContent = o.text;
+      row.appendChild(cb);
+      row.appendChild(txt);
+      optWrap.appendChild(row);
+      cb.addEventListener('change', ()=>{
+        const set = MSEL.values[selectId] || new Set();
+        if(cb.checked) set.add(cb.value); else set.delete(cb.value);
+        MSEL.values[selectId] = set;
+        updateLabel();
+        // fire external change
+        document.dispatchEvent(new CustomEvent('msel-change', { detail:{ id: selectId, values: Array.from(set) } }));
+      });
+    });
+    updateLabel();
+  }
+
+  function updateLabel(){
+    const set = Array.from(MSEL.values[selectId] || []);
+    if(set.length === 0){
+      btn.textContent = placeholder;
+    }else if(set.length <= 2){
+      btn.innerHTML = set.map(v=>`<span class="msel-pill">${v}</span>`).join(' ');
+    }else{
+      btn.innerHTML = `<span class="msel-pill">${set.length} seleccionados</span>`;
+    }
+  }
+
+  btn.addEventListener('click', ()=>{
+    panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+  });
+  document.addEventListener('click', (e)=>{
+    if(!wrap.contains(e.target)) panel.style.display = 'none';
+  });
+  search.addEventListener('input', rebuild);
+
+  rebuild();
+}
+
+function getMultiValues(selectId){
+  if(MSEL.values[selectId] && MSEL.values[selectId].size) return Array.from(MSEL.values[selectId]);
+  // fallback a select simple si aún no se ha mejorado
+  const sel = document.getElementById(selectId);
+  if(!sel) return [];
+  if(sel.multiple) {
+    return Array.from(sel.selectedOptions).map(o=>o.value).filter(Boolean);
+  }
+  const v = sel.value;
+  return v ? [v] : [];
+}
+
 const JOIN_KEYS = ['Cod Empresa','CodEmpresa','Cod_Empresa','codigo_empresa','codigo','CodEmp','CodEmpresaId','codigo_npg','Codigo NPG','Codigo_NPG','CODIGO_NPG'];
 function norm(v){ return (v??'').toString().trim().toLowerCase(); }
 function stripAccents(s){ return (s??'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
@@ -708,6 +838,9 @@ function buildFilters(){
   const vendOpts = uniqueSorted(S.map(x=>x.vendedor)).filter(v=> !isVendorExcluded(v) );
   fillSelect('fVendedor', vendOpts, 'Todos');
   fillSelect('fGestor', uniqueSorted(S.map(x=>x.gestor)), 'Todos');
+  // Enhance Vendedor/Gestor as checklist dropdowns
+  enhanceMultiSelect('fVendedor','Todos');
+  enhanceMultiSelect('fGestor','Todos');
   fillSelect('fEmpresa', uniqueSorted(S.map(x=>x.empresa)), 'Todas');
   const opts = S.map(x=>({value:x.cod, label:`${x.cod} - ${x.nombre}`})).sort((a,b)=>a.label.localeCompare(b.label,'es',{numeric:true}));
   const sel = document.getElementById('fCliente'); sel.innerHTML = '<option value="">-- Seleccione --</option>' + opts.map(o=>`<option value="${o.value}">${o.label}</option>`).join('');
@@ -721,11 +854,11 @@ function buildLegend(){
   });
 }
 function applyFilters(){
-  const fSemana=val('fSemana'), fDia=val('fDia'), fVend=val('fVendedor'), fGes=val('fGestor'), fEmp=val('fEmpresa'), fBus=norm(val('fBuscar')), fCli=val('fCliente');
+  const fSemana=val('fSemana'), fDia=val('fDia'), fVend=getMultiValues('fVendedor'), fGes=getMultiValues('fGestor'), fEmp=val('fEmpresa'), fBus=norm(val('fBuscar')), fCli=val('fCliente');
   STATE.filtered = STATE.joined.filter(x=>{
     if(isVendorExcluded(x.vendedor)) return false;
     if(fSemana && String(x.semana)!==String(fSemana)) return false; if(fDia && String(x.dia)!==String(fDia)) return false;
-    if(fVend && String(x.vendedor)!==String(fVend)) return false; if(fGes && String(x.gestor)!==String(fGes)) return false;
+    if(fVend.length && !fVend.includes(String(x.vendedor))) return false; if(fGes.length && !fGes.includes(String(x.gestor))) return false;
     if(fEmp && String(x.empresa)!==String(fEmp)) return false; if(fCli && String(x.cod)!==String(fCli)) return false;
     if(fBus){ const hay=[x.cod,x.nombre,x.vendedor,x.gestor,x.empresa].map(v=>norm(v)).some(s=>s.includes(fBus)); if(!hay) return false; }
     return true;
@@ -1058,6 +1191,10 @@ document.getElementById('btnCallGuardar').addEventListener('click', saveCallReco
 function fallbackToDemo(){ STATE.users = DEMO.usuarios.map(mapUserRecord); STATE.clientes = DEMO.clientes; STATE.calendario = DEMO.calendario; }
 
 window.addEventListener('DOMContentLoaded', ()=>{ init(); initMap(); });
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 <script>
@@ -1149,6 +1286,10 @@ document.addEventListener('DOMContentLoaded', function(){
         });
     }
 });
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -1263,6 +1404,10 @@ function closeNuevoClienteModal() {
   document.getElementById('modalNuevoCliente').classList.add('hidden');
   document.body.classList.remove('no-scroll');
 }
+
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
 
 </script>
 
@@ -1440,6 +1585,10 @@ function guardarNuevoCliente() {
   showErr('Nuevo cliente agregado (localmente).');
 }
 
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 <script>
@@ -1598,6 +1747,10 @@ document.addEventListener('click', (ev)=>{
     };
   }
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -1610,6 +1763,10 @@ document.addEventListener('click', (ev)=>{
     }
   }
 });
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -1855,6 +2012,10 @@ document.addEventListener('click', (ev)=>{
   }
   window.exportRR = exportRR;
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -1864,6 +2025,10 @@ document.addEventListener('click', (ev)=>{
     if(typeof window.__showResumenScreen === 'function'){ window.__showResumenScreen(); }
   }
 });
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -1918,6 +2083,10 @@ document.addEventListener('click', (ev)=>{
     rrTryPopulateLater();
   };
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -2085,6 +2254,10 @@ document.addEventListener('click', (ev)=>{
     if(el) el.addEventListener('change', function(){ try{ renderRR(); }catch(_){}});
   });
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -2281,6 +2454,10 @@ document.addEventListener('click', (ev)=>{
     if(ev.target && ['rwSemana','rwVendedor','rwGestor'].includes(ev.target.id)){ render(); }
   });
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -2307,8 +2484,16 @@ document.addEventListener('click', (ev)=>{
     .dlp-table th,.dlp-table td{border-color:#1f2937}
   }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js">
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js">
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
+</script>
 <script>
 (function(){
   const AGENDA_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSGjr-XdLSamHpGQfoORmLfntJbLd-UbFpD7NdMM14x2JdMhxOYHTWQBlhYCMDu0ZTy3AYS-1Y3q91Y/pub?gid=223681507&single=true&output=csv";
@@ -2781,6 +2966,10 @@ try{
 
   new MutationObserver(()=>hideFloatingOnLogin()).observe(document.documentElement, {subtree:true, childList:true});
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -2858,6 +3047,10 @@ try{
   mo.observe(document.documentElement || document.body, {childList:true, subtree:true});
 })();
 // === End patch ===
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -2986,6 +3179,10 @@ try{
     } catch(e){ /* no-op */ }
   });
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 <script id="safe-resumen-overlay">
@@ -3004,6 +3201,10 @@ try{
   // Expose for other scripts if needed
   window.__resumen = window.__resumen || { open: openResumen, close: closeResumen };
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -3137,6 +3338,10 @@ try{
     }, true);
   });
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -3337,12 +3542,24 @@ function computeResumenAggregates(){
 
   try{ wire(); }catch(e){ console.warn('KPI resumen clean wire err', e); }
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
 <!-- ======= INTEGRACIÓN KPI SEMANAL ======= -->
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js">
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js">
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
+</script>
 <style>
   /* Overlay */
   #rsOverlay{position:fixed;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(3px);display:none;align-items:flex-start;justify-content:center;overflow:auto;z-index:9999}
@@ -3733,6 +3950,10 @@ document.getElementById('rsExport').onclick = ()=>{
 document.getElementById('rsSemana').onchange = RS_render;
 document.getElementById('rsTabPend').onclick = (e)=>{ e.target.classList.add('active'); document.getElementById('rsTabReal').classList.remove('active'); RS_render(); };
 document.getElementById('rsTabReal').onclick = (e)=>{ e.target.classList.add('active'); document.getElementById('rsTabPend').classList.remove('active'); RS_render(); };
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -3761,6 +3982,10 @@ document.getElementById('rsTabReal').onclick = (e)=>{ e.target.classList.add('ac
       setTimeout(()=>{ bar.remove(); }, 3500);
     });
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -3899,6 +4124,10 @@ document.getElementById('rsTabReal').onclick = (e)=>{ e.target.classList.add('ac
 
   document.addEventListener('DOMContentLoaded', ensureExcelButtons);
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -3952,6 +4181,10 @@ document.getElementById('rsTabReal').onclick = (e)=>{ e.target.classList.add('ac
   const _openReporte = window.openReporte;
   window.openReporte = function(){ try{ ensureRepDropdowns(); }catch(_){ } if(_openReporte) return _openReporte(); };
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -4017,6 +4250,10 @@ document.getElementById('rsTabReal').onclick = (e)=>{ e.target.classList.add('ac
     }
   });
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -4085,6 +4322,10 @@ document.getElementById('rsTabReal').onclick = (e)=>{ e.target.classList.add('ac
   }
   document.addEventListener('DOMContentLoaded', ()=> tryFill(5));
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -4156,6 +4397,10 @@ document.getElementById('rsTabReal').onclick = (e)=>{ e.target.classList.add('ac
     }
   };
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -4254,6 +4499,10 @@ document.getElementById('rsTabReal').onclick = (e)=>{ e.target.classList.add('ac
     try{ setSemanaOptionsDefault(); }catch(_){}
   });
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -4288,6 +4537,10 @@ document.getElementById('rsTabReal').onclick = (e)=>{ e.target.classList.add('ac
     attach();
   }
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 <!-- FIX: Centrado RD + render inmediato Leaflet (sin cambiar UI) -->
@@ -4379,6 +4632,10 @@ document.getElementById('rsTabReal').onclick = (e)=>{ e.target.classList.add('ac
   document.addEventListener('DOMContentLoaded', init);
   window.addEventListener('load', () => setTimeout(applyToExisting, 100));
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -4400,6 +4657,10 @@ document.getElementById('rsTabReal').onclick = (e)=>{ e.target.classList.add('ac
     }
   }, true);
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 
 
@@ -4539,6 +4800,10 @@ document.getElementById('rsTabReal').onclick = (e)=>{ e.target.classList.add('ac
   // first pass
   setTimeout(rebuild, 800);
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
 </body>
 </html>
@@ -4577,4 +4842,8 @@ document.getElementById('rsTabReal').onclick = (e)=>{ e.target.classList.add('ac
   var ap=document.getElementById('app'); if(ap && window.MutationObserver){ var mo=new MutationObserver(function(){ if(!ap.classList.contains('hidden')) ensureMapReady(); }); mo.observe(ap,{attributes:true, attributeFilter:['class']}); }
   var mapEl=document.getElementById('map'); if(mapEl && window.ResizeObserver){ var ro=new ResizeObserver(function(){ try{ if(window.STATE && STATE.map) STATE.map.invalidateSize(); }catch(_){}}); ro.observe(mapEl); }
 })();
+
+// === MultiSelect change => re-aplicar filtros ===
+document.addEventListener('msel-change', (e)=>{ try{ applyFilters(); }catch(_){} });
+
 </script>
